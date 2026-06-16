@@ -1,6 +1,7 @@
 import type {
   KavbanAgent,
   KavbanAgentId,
+  KavbanAgentRouting,
   KavbanConnectorId,
   KavbanInboxItem,
   KavbanProfile,
@@ -31,6 +32,14 @@ export const kavbanAgents: Record<KavbanAgentId, KavbanAgent> = {
     color: '#d6cdfd',
     role: 'Independent review and merge-gate checks.',
   },
+};
+
+export const kavbanDefaultAgentRouting: KavbanAgentRouting = {
+  defaultAgentId: 'codex',
+  uiAgentId: 'claude',
+  codeAgentId: 'codex',
+  reviewerAgentId: 'reviewer',
+  humanReviewRequired: true,
 };
 
 export const kavbanWorkflowColumns: KavbanWorkflowColumn[] = [
@@ -271,6 +280,7 @@ export const kavbanProject: KavbanProject = {
     defaultBranch: 'main',
     localPath: '/Users/kavinbakhda/Desktop/KAVBAN',
   },
+  agentRouting: kavbanDefaultAgentRouting,
   workflowColumns: kavbanWorkflowColumns,
   contextFiles: [
     {

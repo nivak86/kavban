@@ -5,9 +5,10 @@ import {
   writeKavbanLocalState,
   type KavbanLocalState,
 } from './storage';
-import { kavbanProject } from './seed';
+import { kavbanDefaultAgentRouting, kavbanProject } from './seed';
 import type {
   KavbanAgentId,
+  KavbanAgentRouting,
   KavbanConnector,
   KavbanConnectorId,
   KavbanContextFile,
@@ -44,6 +45,8 @@ export type KavbanRepositoryInput = {
   localPath: string;
 };
 
+export type KavbanAgentRoutingInput = KavbanAgentRouting;
+
 const taskStateByStatus: Record<KavbanTaskStatus, string> = {
   backlog: 'Draft',
   ready: 'Ready',
@@ -54,6 +57,8 @@ const taskStateByStatus: Record<KavbanTaskStatus, string> = {
 };
 
 const tagColors = ['#6aa7ff', '#78d16d', '#f2d14b', '#f26d6d', '#d6cdfd'];
+const workerAgentIds: KavbanAgentId[] = ['codex', 'claude'];
+const reviewerAgentIds: KavbanAgentId[] = ['reviewer', 'codex'];
 
 function slugifyProjectName(name: string) {
   return (
@@ -157,6 +162,29 @@ function normalizeRepository(input: KavbanRepositoryInput) {
   };
 }
 
+function getProjectAgentRouting(project: KavbanProject) {
+  return project.agentRouting ?? kavbanDefaultAgentRouting;
+}
+
+function normalizeAgentRouting(input: KavbanAgentRoutingInput) {
+  if (
+    !workerAgentIds.includes(input.defaultAgentId) ||
+    !workerAgentIds.includes(input.uiAgentId) ||
+    !workerAgentIds.includes(input.codeAgentId) ||
+    !reviewerAgentIds.includes(input.reviewerAgentId)
+  ) {
+    return null;
+  }
+
+  return {
+    defaultAgentId: input.defaultAgentId,
+    uiAgentId: input.uiAgentId,
+    codeAgentId: input.codeAgentId,
+    reviewerAgentId: input.reviewerAgentId,
+    humanReviewRequired: input.humanReviewRequired,
+  };
+}
+
 function replaceContextFilePath(paths: string[], from: string, to: string) {
   return Array.from(
     new Set(paths.map((path) => (path === from ? to : path)).filter(Boolean))
@@ -210,6 +238,10 @@ export function useKavbanLocalStore() {
     state.projects.find((project) => project.id === state.activeProjectId) ??
     state.projects[0] ??
     kavbanProject;
+  const activeProjectWithDefaults = {
+    ...activeProject,
+    agentRouting: getProjectAgentRouting(activeProject),
+  };
 
   useEffect(() => {
     writeKavbanLocalState(state);
@@ -258,6 +290,29 @@ export function useKavbanLocalStore() {
     },
     []
   );
+
+  const updateAgentRouting = useCallback((input: KavbanAgentRoutingInput) => {
+    const agentRouting = normalizeAgentRouting(input);
+
+    if (!agentRouting) {
+      return false;
+    }
+
+    setState((current) => ({
+      ...current,
+      projects: current.projects.map((project) =>
+        project.id === current.activeProjectId
+          ? {
+              ...project,
+              agentRouting,
+            }
+          : project
+      ),
+      updatedAt: nowIso(),
+    }));
+
+    return true;
+  }, []);
 
   const selectProject = useCallback((projectId: string) => {
     setState((current) => {
@@ -635,10 +690,11 @@ export function useKavbanLocalStore() {
     inboxItems: state.inboxItems,
     moveTask,
     profile: state.profile,
-    project: activeProject,
+    project: activeProjectWithDefaults,
     projects: state.projects,
     selectProject,
     state,
+    updateAgentRouting,
     updateConnector,
     updateContextFile,
     updateProjectBrief,

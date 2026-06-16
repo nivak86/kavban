@@ -48,6 +48,14 @@ export type KavbanAgent = {
   role: string;
 };
 
+export type KavbanAgentRouting = {
+  defaultAgentId: KavbanAgentId;
+  uiAgentId: KavbanAgentId;
+  codeAgentId: KavbanAgentId;
+  reviewerAgentId: KavbanAgentId;
+  humanReviewRequired: boolean;
+};
+
 export type KavbanTag = {
   label: string;
   color: string;
@@ -105,6 +113,7 @@ export type KavbanProject = {
   name: string;
   brief: string;
   repository: KavbanRepository;
+  agentRouting?: KavbanAgentRouting;
   workflowColumns: KavbanWorkflowColumn[];
   contextFiles: KavbanContextFile[];
   connectors: Record<KavbanConnectorId, KavbanConnector>;

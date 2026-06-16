@@ -41,11 +41,13 @@ import { cn } from '@/shared/lib/utils';
 import {
   kavbanAgents,
   kavbanConnectorOrder,
+  kavbanDefaultAgentRouting,
   kavbanWorkflowColumns,
   useKavbanLocalStore,
 } from './model';
 import type {
   KavbanAgent as Agent,
+  KavbanAgentRoutingInput,
   KavbanConnector as Connector,
   KavbanConnectorId as ConnectorId,
   KavbanContextFileInput,
@@ -761,12 +763,16 @@ function WorkspaceHome({
 
 function TaskCreatePanel({
   contextFiles,
+  defaultAgentId,
+  defaultReviewerId,
   defaultStatus,
   dependencyTasks,
   onCancel,
   onCreate,
 }: {
   contextFiles: Project['contextFiles'];
+  defaultAgentId: KavbanAgentId;
+  defaultReviewerId: KavbanAgentId;
   defaultStatus: TaskStatus;
   dependencyTasks: Task[];
   onCancel: () => void;
@@ -780,8 +786,9 @@ function TaskCreatePanel({
   const [description, setDescription] = useState('');
   const [status, setStatus] = useState<TaskStatus>(defaultStatus);
   const [priority, setPriority] = useState<KavbanTaskPriority>('Medium');
-  const [agentId, setAgentId] = useState<KavbanAgentId>('codex');
-  const [reviewerId, setReviewerId] = useState<KavbanAgentId>('reviewer');
+  const [agentId, setAgentId] = useState<KavbanAgentId>(defaultAgentId);
+  const [reviewerId, setReviewerId] =
+    useState<KavbanAgentId>(defaultReviewerId);
   const [tagText, setTagText] = useState('');
   const [selectedContextFiles, setSelectedContextFiles] =
     useState(defaultContextFiles);
@@ -791,8 +798,10 @@ function TaskCreatePanel({
 
   useEffect(() => {
     setStatus(defaultStatus);
+    setAgentId(defaultAgentId);
+    setReviewerId(defaultReviewerId);
     setSelectedContextFiles(defaultContextFiles);
-  }, [defaultContextFiles, defaultStatus]);
+  }, [defaultAgentId, defaultContextFiles, defaultReviewerId, defaultStatus]);
 
   const toggleContextFile = (path: string) => {
     setSelectedContextFiles((current) =>
@@ -1762,6 +1771,7 @@ function TaskDetailPanel({
 }
 
 function WorkspaceTasks({
+  agentRouting,
   contextFiles,
   onCreateTask,
   onDeleteTask,
@@ -1774,6 +1784,7 @@ function WorkspaceTasks({
   onSelectTask,
   tasks,
 }: {
+  agentRouting: KavbanAgentRoutingInput;
   contextFiles: Project['contextFiles'];
   onCreateTask: (input: KavbanCreateTaskInput) => string | null;
   onDeleteTask: (taskId: string) => boolean;
@@ -1865,6 +1876,8 @@ function WorkspaceTasks({
         {isCreatingTask && (
           <TaskCreatePanel
             contextFiles={contextFiles}
+            defaultAgentId={agentRouting.defaultAgentId}
+            defaultReviewerId={agentRouting.reviewerAgentId}
             defaultStatus={taskCreateStatus}
             dependencyTasks={tasks}
             onCancel={() => setIsCreatingTask(false)}
@@ -1966,10 +1979,12 @@ function ConnectorCard({
 }
 
 function WorkspaceSettings({
+  agentRouting,
   brief,
   connectors,
   contextFiles,
   repository,
+  onAgentRoutingChange,
   onBriefChange,
   onCreateContextFile,
   onDeleteContextFile,
@@ -1977,10 +1992,12 @@ function WorkspaceSettings({
   onToggleConnector,
   onUpdateContextFile,
 }: {
+  agentRouting: KavbanAgentRoutingInput;
   brief: string;
   connectors: Record<ConnectorId, Connector>;
   contextFiles: Project['contextFiles'];
   repository: Project['repository'];
+  onAgentRoutingChange: (input: KavbanAgentRoutingInput) => boolean;
   onBriefChange: (value: string) => void;
   onCreateContextFile: (input: KavbanContextFileInput) => boolean;
   onDeleteContextFile: (path: string) => boolean;
@@ -1988,6 +2005,9 @@ function WorkspaceSettings({
   onToggleConnector: (id: ConnectorId) => void;
   onUpdateContextFile: (path: string, input: KavbanContextFileInput) => boolean;
 }) {
+  const [agentRoutingError, setAgentRoutingError] = useState('');
+  const [draftAgentRouting, setDraftAgentRouting] =
+    useState<KavbanAgentRoutingInput>(agentRouting);
   const [repositoryError, setRepositoryError] = useState('');
   const [draftRepository, setDraftRepository] = useState<KavbanRepositoryInput>(
     {
@@ -2007,6 +2027,11 @@ function WorkspaceSettings({
   const [draftContextPath, setDraftContextPath] = useState('');
   const [draftContextPurpose, setDraftContextPurpose] = useState('');
   const [draftContextInjected, setDraftContextInjected] = useState(true);
+
+  useEffect(() => {
+    setDraftAgentRouting(agentRouting);
+    setAgentRoutingError('');
+  }, [agentRouting]);
 
   useEffect(() => {
     setDraftRepository({
@@ -2048,6 +2073,16 @@ function WorkspaceSettings({
     }));
   };
 
+  const updateDraftAgentRouting = <Key extends keyof KavbanAgentRoutingInput>(
+    field: Key,
+    value: KavbanAgentRoutingInput[Key]
+  ) => {
+    setDraftAgentRouting((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  };
+
   const saveRepository = () => {
     const saved = onRepositoryChange(draftRepository);
 
@@ -2059,6 +2094,17 @@ function WorkspaceSettings({
     }
 
     setRepositoryError('');
+  };
+
+  const saveAgentRouting = () => {
+    const saved = onAgentRoutingChange(draftAgentRouting);
+
+    if (!saved) {
+      setAgentRoutingError('Choose valid agents before saving routing.');
+      return;
+    }
+
+    setAgentRoutingError('');
   };
 
   const createContextFile = () => {
@@ -2124,6 +2170,140 @@ function WorkspaceSettings({
             onChange={(event) => onBriefChange(event.target.value)}
             className="min-h-[160px] w-full resize-y rounded-[7px] border border-[#2a2c31] bg-[#111214] p-4 text-sm leading-6 text-[#dce0e8] outline-none transition-colors placeholder:text-[#626874] focus:border-[#444956]"
           />
+        </section>
+
+        <section className="rounded-[8px] border border-[#24262b] bg-[#17181b] p-5">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <RobotIcon className="size-5 text-[#858b96]" weight="bold" />
+              <h2 className="text-lg font-semibold text-[#dce0e8]">Agents</h2>
+            </div>
+            <span className="rounded-full border border-[#2a2c31] px-2 py-1 text-xs font-semibold text-[#858b96]">
+              {kavbanAgents[draftAgentRouting.defaultAgentId].name} default
+            </span>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="block">
+              <span className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#777d88]">
+                <CompassIcon className="size-3.5" weight="bold" />
+                Default worker
+              </span>
+              <select
+                value={draftAgentRouting.defaultAgentId}
+                onChange={(event) =>
+                  updateDraftAgentRouting(
+                    'defaultAgentId',
+                    event.target.value as KavbanAgentId
+                  )
+                }
+                className={cn(taskFormFieldClass, 'h-9')}
+              >
+                {agentOptions.map((agentId) => (
+                  <option key={agentId} value={agentId}>
+                    {kavbanAgents[agentId].name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#777d88]">
+                <SparkleIcon className="size-3.5" weight="bold" />
+                UI and product work
+              </span>
+              <select
+                value={draftAgentRouting.uiAgentId}
+                onChange={(event) =>
+                  updateDraftAgentRouting(
+                    'uiAgentId',
+                    event.target.value as KavbanAgentId
+                  )
+                }
+                className={cn(taskFormFieldClass, 'h-9')}
+              >
+                {agentOptions.map((agentId) => (
+                  <option key={agentId} value={agentId}>
+                    {kavbanAgents[agentId].name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#777d88]">
+                <TerminalIcon className="size-3.5" weight="bold" />
+                Code and tests
+              </span>
+              <select
+                value={draftAgentRouting.codeAgentId}
+                onChange={(event) =>
+                  updateDraftAgentRouting(
+                    'codeAgentId',
+                    event.target.value as KavbanAgentId
+                  )
+                }
+                className={cn(taskFormFieldClass, 'h-9')}
+              >
+                {agentOptions.map((agentId) => (
+                  <option key={agentId} value={agentId}>
+                    {kavbanAgents[agentId].name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#777d88]">
+                <ShieldCheckIcon className="size-3.5" weight="bold" />
+                Reviewer
+              </span>
+              <select
+                value={draftAgentRouting.reviewerAgentId}
+                onChange={(event) =>
+                  updateDraftAgentRouting(
+                    'reviewerAgentId',
+                    event.target.value as KavbanAgentId
+                  )
+                }
+                className={cn(taskFormFieldClass, 'h-9')}
+              >
+                {reviewerOptions.map((agentId) => (
+                  <option key={agentId} value={agentId}>
+                    {kavbanAgents[agentId].name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className="mt-4 flex flex-col gap-3 border-t border-[#24262b] pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <label className="flex items-center gap-3 text-sm font-semibold text-[#cfd2da]">
+              <input
+                type="checkbox"
+                checked={draftAgentRouting.humanReviewRequired}
+                onChange={(event) =>
+                  updateDraftAgentRouting(
+                    'humanReviewRequired',
+                    event.target.checked
+                  )
+                }
+                className="size-4 accent-[#6aa7ff]"
+              />
+              Require human review by default
+            </label>
+            <button
+              type="button"
+              onClick={saveAgentRouting}
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-[6px] border border-[#31553a] px-3 text-xs font-semibold text-[#78d16d] transition-colors hover:bg-[#172219]"
+            >
+              <CheckCircleIcon className="size-4" weight="bold" />
+              Save routing
+            </button>
+          </div>
+
+          {agentRoutingError && (
+            <p className="mt-4 rounded-[6px] border border-[#5c3434] bg-[#211719] px-3 py-2 text-xs font-semibold text-[#f26d6d]">
+              {agentRoutingError}
+            </p>
+          )}
         </section>
 
         <section className="rounded-[8px] border border-[#24262b] bg-[#17181b] p-5">
@@ -2438,6 +2618,7 @@ function WorkspaceSettings({
 function WorkspaceView({
   activeProjectId,
   connectors,
+  onAgentRoutingChange,
   onBriefChange,
   onCreateContextFile,
   onCreateProject,
@@ -2461,6 +2642,7 @@ function WorkspaceView({
 }: {
   activeProjectId: string;
   connectors: Record<ConnectorId, Connector>;
+  onAgentRoutingChange: (input: KavbanAgentRoutingInput) => boolean;
   onBriefChange: (value: string) => void;
   onCreateContextFile: (input: KavbanContextFileInput) => boolean;
   onCreateProject: (name: string) => void;
@@ -2511,6 +2693,7 @@ function WorkspaceView({
         )}
         {projectTab === 'tasks' && (
           <WorkspaceTasks
+            agentRouting={project.agentRouting ?? kavbanDefaultAgentRouting}
             contextFiles={project.contextFiles}
             onCreateTask={onCreateTask}
             onDeleteTask={onDeleteTask}
@@ -2526,10 +2709,12 @@ function WorkspaceView({
         )}
         {projectTab === 'settings' && (
           <WorkspaceSettings
+            agentRouting={project.agentRouting ?? kavbanDefaultAgentRouting}
             brief={project.brief}
             connectors={connectors}
             contextFiles={project.contextFiles}
             repository={project.repository}
+            onAgentRoutingChange={onAgentRoutingChange}
             onBriefChange={onBriefChange}
             onCreateContextFile={onCreateContextFile}
             onDeleteContextFile={onDeleteContextFile}
@@ -2647,6 +2832,7 @@ export function KavbanDashboard() {
     project,
     projects,
     selectProject,
+    updateAgentRouting,
     updateConnector,
     updateContextFile,
     updateProjectBrief,
@@ -2710,6 +2896,7 @@ export function KavbanDashboard() {
             <WorkspaceView
               activeProjectId={activeProjectId}
               connectors={project.connectors}
+              onAgentRoutingChange={updateAgentRouting}
               onBriefChange={updateProjectBrief}
               onCreateContextFile={createContextFile}
               onCreateProject={createProject}

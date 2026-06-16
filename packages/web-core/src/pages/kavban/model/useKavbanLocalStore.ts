@@ -313,6 +313,43 @@ export function useKavbanLocalStore() {
     [activeProject]
   );
 
+  const deleteTask = useCallback(
+    (taskId: string) => {
+      const taskToDelete = activeProject.tasks.find(
+        (task) => task.id === taskId
+      );
+
+      if (!taskToDelete) {
+        return false;
+      }
+
+      setState((current) => ({
+        ...current,
+        projects: current.projects.map((project) =>
+          project.id === current.activeProjectId
+            ? {
+                ...project,
+                tasks: project.tasks
+                  .filter((task) => task.id !== taskId)
+                  .map((task) => ({
+                    ...task,
+                    dependencies: task.dependencies.filter(
+                      (dependency) =>
+                        dependency !== taskToDelete.id &&
+                        dependency !== taskToDelete.key
+                    ),
+                  })),
+              }
+            : project
+        ),
+        updatedAt: nowIso(),
+      }));
+
+      return true;
+    },
+    [activeProject]
+  );
+
   const updateConnector = useCallback(
     (
       connectorId: KavbanConnectorId,
@@ -341,6 +378,7 @@ export function useKavbanLocalStore() {
     activeProjectId: state.activeProjectId,
     createProject,
     createTask,
+    deleteTask,
     inboxItems: state.inboxItems,
     profile: state.profile,
     project: activeProject,

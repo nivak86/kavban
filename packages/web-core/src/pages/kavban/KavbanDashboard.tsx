@@ -31,6 +31,7 @@ import {
   SlidersHorizontalIcon,
   SparkleIcon,
   TerminalIcon,
+  TrashIcon,
   TrayIcon,
   UserCircleIcon,
   UserIcon,
@@ -1396,16 +1397,20 @@ function TaskEditForm({
 
 function TaskDetailPanel({
   contextFiles,
+  onDeleteTask,
   onUpdateTask,
   task,
 }: {
   contextFiles: Project['contextFiles'];
+  onDeleteTask: (taskId: string) => boolean;
   onUpdateTask: (taskId: string, input: KavbanUpdateTaskInput) => boolean;
   task: Task;
 }) {
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
   useEffect(() => {
+    setIsConfirmingDelete(false);
     setIsEditing(false);
   }, [task.id]);
 
@@ -1448,13 +1453,34 @@ function TaskDetailPanel({
               icon={PencilSimpleIcon}
               onClick={() => setIsEditing(true)}
             />
-            <IconButton label="Task options" icon={DotsThreeIcon} />
+            <IconButton
+              label={isConfirmingDelete ? 'Confirm delete task' : 'Delete task'}
+              icon={isConfirmingDelete ? CheckCircleIcon : TrashIcon}
+              onClick={() => {
+                if (isConfirmingDelete) {
+                  onDeleteTask(task.id);
+                  return;
+                }
+
+                setIsConfirmingDelete(true);
+              }}
+            />
+            <IconButton
+              label="Task options"
+              icon={DotsThreeIcon}
+              onClick={() => setIsConfirmingDelete(false)}
+            />
           </div>
         </div>
         <h2 className="text-lg font-semibold text-[#dce0e8]">{task.title}</h2>
         <p className="mt-3 text-sm leading-6 text-[#8d939f]">
           {task.description}
         </p>
+        {isConfirmingDelete && (
+          <div className="mt-4 rounded-[7px] border border-[#553131] bg-[#211719] px-3 py-2 text-xs font-medium text-[#f26d6d]">
+            Delete task?
+          </div>
+        )}
       </div>
 
       <div className="space-y-5 px-5 py-5">
@@ -1513,6 +1539,7 @@ function TaskDetailPanel({
 function WorkspaceTasks({
   contextFiles,
   onCreateTask,
+  onDeleteTask,
   onUpdateTask,
   projectName,
   taskView,
@@ -1523,6 +1550,7 @@ function WorkspaceTasks({
 }: {
   contextFiles: Project['contextFiles'];
   onCreateTask: (input: KavbanCreateTaskInput) => string | null;
+  onDeleteTask: (taskId: string) => boolean;
   onUpdateTask: (taskId: string, input: KavbanUpdateTaskInput) => boolean;
   projectName: string;
   taskView: TaskView;
@@ -1551,6 +1579,17 @@ function WorkspaceTasks({
     }
 
     return createdTaskId;
+  };
+
+  const handleDeleteTask = (taskId: string) => {
+    const remainingTask = tasks.find((task) => task.id !== taskId);
+    const deleted = onDeleteTask(taskId);
+
+    if (deleted && remainingTask) {
+      onSelectTask(remainingTask.id);
+    }
+
+    return deleted;
   };
 
   return (
@@ -1642,6 +1681,7 @@ function WorkspaceTasks({
       {selectedTask && (
         <TaskDetailPanel
           contextFiles={contextFiles}
+          onDeleteTask={handleDeleteTask}
           onUpdateTask={onUpdateTask}
           task={selectedTask}
         />
@@ -1760,6 +1800,7 @@ function WorkspaceView({
   onBriefChange,
   onCreateProject,
   onCreateTask,
+  onDeleteTask,
   onProjectTabChange,
   onSelectProject,
   onSelectTask,
@@ -1777,6 +1818,7 @@ function WorkspaceView({
   onBriefChange: (value: string) => void;
   onCreateProject: (name: string) => void;
   onCreateTask: (input: KavbanCreateTaskInput) => string | null;
+  onDeleteTask: (taskId: string) => boolean;
   onProjectTabChange: (tab: ProjectTab) => void;
   onSelectProject: (id: string) => void;
   onSelectTask: (id: string) => void;
@@ -1820,6 +1862,7 @@ function WorkspaceView({
           <WorkspaceTasks
             contextFiles={project.contextFiles}
             onCreateTask={onCreateTask}
+            onDeleteTask={onDeleteTask}
             onUpdateTask={onUpdateTask}
             projectName={project.name}
             taskView={taskView}
@@ -1937,6 +1980,7 @@ export function KavbanDashboard() {
     activeProjectId,
     createProject,
     createTask,
+    deleteTask,
     inboxItems,
     profile,
     project,
@@ -2006,6 +2050,7 @@ export function KavbanDashboard() {
               onBriefChange={updateProjectBrief}
               onCreateProject={createProject}
               onCreateTask={createTask}
+              onDeleteTask={deleteTask}
               onProjectTabChange={setProjectTab}
               onSelectProject={selectProject}
               onSelectTask={setSelectedTaskId}

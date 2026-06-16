@@ -1930,6 +1930,7 @@ function WorkspaceHome({
   onSelectProject,
   onSelectTask,
   onTabChange,
+  onToggleConnector,
   project,
   projects,
 }: {
@@ -1939,6 +1940,7 @@ function WorkspaceHome({
   onSelectProject: (id: string) => void;
   onSelectTask: (id: string) => void;
   onTabChange: (tab: ProjectTab) => void;
+  onToggleConnector: (id: ConnectorId) => void;
   project: Project;
   projects: Project[];
 }) {
@@ -2371,16 +2373,23 @@ function WorkspaceHome({
                         {connector.status}
                       </span>
                     </span>
-                    <span
+                    <button
+                      type="button"
+                      onClick={() => onToggleConnector(connector.id)}
                       className={cn(
-                        'rounded-full border px-2 py-1 text-xs font-semibold',
+                        'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[6px] border px-2.5 text-xs font-semibold transition-colors',
                         connector.connected
-                          ? 'border-[#31553a] text-[#78d16d]'
-                          : 'border-[#554531] text-[#f3cfa8]'
+                          ? 'border-[#31553a] text-[#78d16d] hover:bg-[#172219]'
+                          : 'border-[#554531] text-[#f3cfa8] hover:bg-[#221c14]'
                       )}
                     >
-                      {connector.connected ? 'Connected' : 'Setup'}
-                    </span>
+                      {connector.connected ? (
+                        <XIcon className="size-3.5" weight="bold" />
+                      ) : (
+                        <PlugsConnectedIcon className="size-3.5" weight="bold" />
+                      )}
+                      {connector.connected ? 'Disconnect' : 'Connect'}
+                    </button>
                   </div>
                 );
               })}
@@ -6356,6 +6365,7 @@ function WorkspaceView({
             onSelectProject={onSelectProject}
             onSelectTask={onSelectTask}
             onTabChange={onProjectTabChange}
+            onToggleConnector={onToggleConnector}
             project={project}
             projects={projects}
           />

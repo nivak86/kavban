@@ -162,6 +162,19 @@ const projectTasks: KavbanTask[] = [
     ],
     dependencies: ['KAV-122'],
     contextFiles: ['agent-rules.md', 'review-checklist.md'],
+    agentRuns: [
+      {
+        id: 'run-kav-000123-seed',
+        agentId: 'codex',
+        status: 'running',
+        branch: 'kav/kav-000123-run-agent',
+        contextFiles: ['agent-rules.md', 'review-checklist.md'],
+        prompt:
+          'Project: Kavban\nRepository: nivak86/kavban\nTask: KAV-123 Run agent with selected context files\nBranch: kav/kav-000123-run-agent\nAssigned agent: Codex\nPriority: High\n\nInstructions:\nBuild a manual run surface that locks a task, creates a branch, assembles context, and starts the selected agent.\n\nContext files:\n- agent-rules.md\n- review-checklist.md',
+        createdAt: '2026-06-16T09:20:00.000Z',
+        updatedAt: '2026-06-16T09:20:00.000Z',
+      },
+    ],
     events: [
       {
         id: 'evt-kav-123-started',

@@ -5,7 +5,7 @@ import {
   writeKavbanLocalState,
   type KavbanLocalState,
 } from './storage';
-import { kavbanDefaultAgentRouting, kavbanProject } from './seed';
+import { kavbanAgents, kavbanDefaultAgentRouting, kavbanProject } from './seed';
 import type {
   KavbanAgentId,
   KavbanAgentRouting,
@@ -125,6 +125,23 @@ function createTaskBranch(taskId: string, title: string) {
   return `kav/${taskId}-${createBranchSlug(title)}`;
 }
 
+function getTaskDependency(
+  dependency: string,
+  tasks: KavbanTask[]
+): KavbanTask | undefined {
+  return tasks.find(
+    (task) => task.id === dependency || task.key === dependency
+  );
+}
+
+function hasBlockingDependencies(task: KavbanTask, tasks: KavbanTask[]) {
+  return task.dependencies.some((dependency) => {
+    const dependencyTask = getTaskDependency(dependency, tasks);
+
+    return !dependencyTask || dependencyTask.status !== 'done';
+  });
+}
+
 function getTaskContextFiles(
   project: KavbanProject,
   input: KavbanCreateTaskInput
@@ -136,6 +153,49 @@ function getTaskContextFiles(
   return project.contextFiles
     .filter((file) => file.injected)
     .map((file) => file.path);
+}
+
+function getAgentRunContextFiles(project: KavbanProject, task: KavbanTask) {
+  if (task.contextFiles.length > 0) {
+    return task.contextFiles;
+  }
+
+  return project.contextFiles
+    .filter((file) => file.injected)
+    .map((file) => file.path);
+}
+
+function createAgentRunPrompt(
+  project: KavbanProject,
+  task: KavbanTask,
+  branch: string,
+  contextFiles: string[]
+) {
+  const repository = `${project.repository.owner}/${project.repository.name}`;
+  const contextLines =
+    contextFiles.length > 0
+      ? contextFiles.map((file) => `- ${file}`)
+      : ['- No context files selected.'];
+
+  return [
+    `Project: ${project.name}`,
+    `Repository: ${repository}`,
+    `Task: ${task.key} ${task.title}`,
+    `Branch: ${branch}`,
+    `Assigned agent: ${kavbanAgents[task.agentId].name}`,
+    `Priority: ${task.priority}`,
+    '',
+    'Instructions:',
+    task.description,
+    '',
+    'Context files:',
+    ...contextLines,
+    '',
+    'Operating rules:',
+    '- Keep the implementation scoped to this task.',
+    '- Run the relevant checks before handing work back.',
+    '- Record PR, review, and test outcomes on the task.',
+  ].join('\n');
 }
 
 function normalizeContextFile(
@@ -626,6 +686,84 @@ export function useKavbanLocalStore() {
     [activeProject]
   );
 
+  const startAgentRun = useCallback(
+    (taskId: string) => {
+      const taskToRun = activeProject.tasks.find((task) => task.id === taskId);
+
+      if (
+        !taskToRun ||
+        taskToRun.status === 'done' ||
+        hasBlockingDependencies(taskToRun, activeProject.tasks)
+      ) {
+        return null;
+      }
+
+      const updatedAt = nowIso();
+      const runId = `run-${taskId}-${Date.now().toString(36)}`;
+      const branch =
+        taskToRun.branch || createTaskBranch(taskToRun.id, taskToRun.title);
+      const runContextFiles = getAgentRunContextFiles(activeProject, taskToRun);
+      const run = {
+        id: runId,
+        agentId: taskToRun.agentId,
+        status: 'running' as const,
+        branch,
+        contextFiles: runContextFiles,
+        prompt: createAgentRunPrompt(
+          activeProject,
+          taskToRun,
+          branch,
+          runContextFiles
+        ),
+        createdAt: updatedAt,
+        updatedAt,
+      };
+
+      setState((current) => ({
+        ...current,
+        projects: current.projects.map((project) =>
+          project.id === current.activeProjectId
+            ? {
+                ...project,
+                tasks: project.tasks.map((task) =>
+                  task.id === taskId
+                    ? {
+                        ...task,
+                        status: 'progress',
+                        state: taskStateByStatus.progress,
+                        branch,
+                        agentRuns: [run, ...(task.agentRuns ?? [])],
+                        events: [
+                          ...task.events,
+                          {
+                            id: `evt-${runId}-started`,
+                            kind: 'agent-started',
+                            actor: task.agentId,
+                            summary: `${kavbanAgents[task.agentId].name} started branch ${branch}.`,
+                            createdAt: updatedAt,
+                          },
+                          {
+                            id: `evt-${runId}-context`,
+                            kind: 'context-attached',
+                            actor: 'system',
+                            summary: `Context pack assembled with ${runContextFiles.length} files.`,
+                            createdAt: updatedAt,
+                          },
+                        ],
+                      }
+                    : task
+                ),
+              }
+            : project
+        ),
+        updatedAt,
+      }));
+
+      return runId;
+    },
+    [activeProject]
+  );
+
   const moveTask = useCallback(
     (taskId: string, status: KavbanTaskStatus) => {
       const taskToMove = activeProject.tasks.find((task) => task.id === taskId);
@@ -710,6 +848,7 @@ export function useKavbanLocalStore() {
     project: activeProjectWithDefaults,
     projects: state.projects,
     selectProject,
+    startAgentRun,
     state,
     updateAgentRouting,
     updateConnector,

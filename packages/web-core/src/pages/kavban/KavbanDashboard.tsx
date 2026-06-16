@@ -193,6 +193,52 @@ function HumanReviewPill() {
   );
 }
 
+function AgentRunCard({
+  run,
+}: {
+  run: NonNullable<Task['agentRuns']>[number];
+}) {
+  const agent = kavbanAgents[run.agentId];
+
+  return (
+    <div className="rounded-[7px] border border-[#24262b] bg-[#17181b] p-3">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <AgentAvatar agent={agent} />
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-[#dce0e8]">
+              {agent.name}
+            </p>
+            <p className="font-ibm-plex-mono text-[11px] uppercase text-[#6f7682]">
+              {run.status}
+            </p>
+          </div>
+        </div>
+        <span className="shrink-0 font-ibm-plex-mono text-[11px] text-[#777d88]">
+          {new Date(run.createdAt).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+          })}
+        </span>
+      </div>
+      <div className="mb-2 flex min-w-0 items-center gap-2 rounded-[6px] border border-[#2a2c31] bg-[#111214] px-2.5 py-2 text-xs text-[#aeb3bd]">
+        <GitBranchIcon
+          className="size-3.5 shrink-0 text-[#58b957]"
+          weight="bold"
+        />
+        <span className="truncate font-ibm-plex-mono">{run.branch}</span>
+      </div>
+      <div className="mb-3 flex items-center gap-2 text-xs text-[#858b96]">
+        <FileTextIcon className="size-3.5" weight="bold" />
+        {run.contextFiles.length} context files attached
+      </div>
+      <pre className="max-h-28 overflow-hidden whitespace-pre-wrap rounded-[6px] border border-[#24262b] bg-[#101113] p-3 font-ibm-plex-mono text-[11px] leading-5 text-[#8d939f]">
+        {run.prompt}
+      </pre>
+    </div>
+  );
+}
+
 function BlockedPill({ count }: { count: number }) {
   return (
     <span className="inline-flex h-6 items-center gap-1.5 rounded-[5px] border border-[#553131] bg-[#25191b] px-2 text-xs font-medium text-[#f26d6d]">
@@ -1632,6 +1678,7 @@ function TaskDetailPanel({
   contextFiles,
   onDeleteTask,
   onMoveTask,
+  onStartAgentRun,
   onUpdateTask,
   projectTasks,
   task,
@@ -1639,6 +1686,7 @@ function TaskDetailPanel({
   contextFiles: Project['contextFiles'];
   onDeleteTask: (taskId: string) => boolean;
   onMoveTask: (taskId: string, status: TaskStatus) => boolean;
+  onStartAgentRun: (taskId: string) => string | null;
   onUpdateTask: (taskId: string, input: KavbanUpdateTaskInput) => boolean;
   projectTasks: Task[];
   task: Task;
@@ -1650,6 +1698,9 @@ function TaskDetailPanel({
   const advanceAction = taskAdvanceActions[task.status];
   const isAdvanceBlocked =
     advanceAction?.status === 'progress' && blockingDependencies.length > 0;
+  const agentRuns = task.agentRuns ?? [];
+  const isRunAgentBlocked =
+    task.status === 'done' || blockingDependencies.length > 0;
 
   useEffect(() => {
     setIsConfirmingDelete(false);
@@ -1727,7 +1778,24 @@ function TaskDetailPanel({
       </div>
 
       <div className="space-y-5 px-5 py-5">
-        {advanceAction && (
+        {task.status === 'ready' && (
+          <button
+            type="button"
+            disabled={isRunAgentBlocked}
+            onClick={() => onStartAgentRun(task.id)}
+            className={cn(
+              'flex h-9 w-full items-center justify-center gap-2 rounded-[6px] border px-3 text-xs font-semibold transition-colors',
+              isRunAgentBlocked
+                ? 'cursor-not-allowed border-[#553131] bg-[#211719] text-[#f26d6d]'
+                : 'border-[#31553a] bg-[#172219] text-[#78d16d] hover:border-[#427049]'
+            )}
+          >
+            <TerminalIcon className="size-4" weight="bold" />
+            {isRunAgentBlocked ? 'Blocked' : 'Run agent'}
+          </button>
+        )}
+
+        {task.status !== 'ready' && advanceAction && (
           <button
             type="button"
             disabled={isAdvanceBlocked}
@@ -1838,6 +1906,24 @@ function TaskDetailPanel({
 
         <div>
           <h3 className="mb-2 text-sm font-semibold text-[#dce0e8]">
+            Agent runs
+          </h3>
+          {agentRuns.length > 0 ? (
+            <div className="space-y-3">
+              {agentRuns.map((run) => (
+                <AgentRunCard key={run.id} run={run} />
+              ))}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 rounded-[6px] border border-[#24262b] bg-[#17181b] px-3 py-2 text-sm text-[#8d939f]">
+              <TerminalIcon className="size-4 text-[#777d88]" weight="bold" />
+              No agent runs yet
+            </div>
+          )}
+        </div>
+
+        <div>
+          <h3 className="mb-2 text-sm font-semibold text-[#dce0e8]">
             Activity
           </h3>
           <div className="space-y-3">
@@ -1860,6 +1946,7 @@ function WorkspaceTasks({
   onCreateTask,
   onDeleteTask,
   onMoveTask,
+  onStartAgentRun,
   onUpdateTask,
   projectName,
   taskView,
@@ -1873,6 +1960,7 @@ function WorkspaceTasks({
   onCreateTask: (input: KavbanCreateTaskInput) => string | null;
   onDeleteTask: (taskId: string) => boolean;
   onMoveTask: (taskId: string, status: TaskStatus) => boolean;
+  onStartAgentRun: (taskId: string) => string | null;
   onUpdateTask: (taskId: string, input: KavbanUpdateTaskInput) => boolean;
   projectName: string;
   taskView: TaskView;
@@ -2009,6 +2097,7 @@ function WorkspaceTasks({
           contextFiles={contextFiles}
           onDeleteTask={handleDeleteTask}
           onMoveTask={onMoveTask}
+          onStartAgentRun={onStartAgentRun}
           onUpdateTask={onUpdateTask}
           projectTasks={tasks}
           task={selectedTask}
@@ -2715,6 +2804,7 @@ function WorkspaceView({
   onRepositoryChange,
   onSelectProject,
   onSelectTask,
+  onStartAgentRun,
   onTaskViewChange,
   onToggleConnector,
   onUpdateContextFile,
@@ -2739,6 +2829,7 @@ function WorkspaceView({
   onRepositoryChange: (input: KavbanRepositoryInput) => boolean;
   onSelectProject: (id: string) => void;
   onSelectTask: (id: string) => void;
+  onStartAgentRun: (taskId: string) => string | null;
   onTaskViewChange: (view: TaskView) => void;
   onToggleConnector: (id: ConnectorId) => void;
   onUpdateContextFile: (path: string, input: KavbanContextFileInput) => boolean;
@@ -2783,6 +2874,7 @@ function WorkspaceView({
             onCreateTask={onCreateTask}
             onDeleteTask={onDeleteTask}
             onMoveTask={onMoveTask}
+            onStartAgentRun={onStartAgentRun}
             onUpdateTask={onUpdateTask}
             projectName={project.name}
             taskView={taskView}
@@ -2917,6 +3009,7 @@ export function KavbanDashboard() {
     project,
     projects,
     selectProject,
+    startAgentRun,
     updateAgentRouting,
     updateConnector,
     updateContextFile,
@@ -2993,6 +3086,7 @@ export function KavbanDashboard() {
               onRepositoryChange={updateProjectRepository}
               onSelectProject={selectProject}
               onSelectTask={setSelectedTaskId}
+              onStartAgentRun={startAgentRun}
               onTaskViewChange={setTaskView}
               onToggleConnector={toggleConnector}
               onUpdateContextFile={updateContextFile}

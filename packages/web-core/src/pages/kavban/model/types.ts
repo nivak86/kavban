@@ -75,6 +75,19 @@ export type KavbanTaskEvent = {
   createdAt: string;
 };
 
+export type KavbanAgentRunStatus = 'queued' | 'running' | 'completed';
+
+export type KavbanAgentRun = {
+  id: string;
+  agentId: KavbanAgentId;
+  status: KavbanAgentRunStatus;
+  branch: string;
+  contextFiles: string[];
+  prompt: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type KavbanTask = {
   id: string;
   key: string;
@@ -91,6 +104,7 @@ export type KavbanTask = {
   tags: KavbanTag[];
   dependencies: string[];
   contextFiles: string[];
+  agentRuns?: KavbanAgentRun[];
   events: KavbanTaskEvent[];
 };
 

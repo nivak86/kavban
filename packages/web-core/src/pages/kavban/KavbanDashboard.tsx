@@ -1663,6 +1663,7 @@ function InboxView({
   inboxItems,
   onAddTaskComment,
   onOpenTask,
+  onRecordHumanReview,
   selectedInboxId,
   onSelectInbox,
   tasks,
@@ -1673,6 +1674,10 @@ function InboxView({
     input: KavbanAddTaskCommentInput
   ) => boolean;
   onOpenTask: (taskId: string) => void;
+  onRecordHumanReview: (
+    taskId: string,
+    input: KavbanRecordHumanReviewInput
+  ) => boolean;
   selectedInboxId: string;
   onSelectInbox: (id: string) => void;
   tasks: Task[];
@@ -1692,6 +1697,8 @@ function InboxView({
     visibleInboxItems[0];
   const task = tasks.find((item) => item.key === selected?.taskKey);
   const SelectedIcon = selected ? inboxIconByKind[selected.kind] : ArchiveIcon;
+  const canReviewFromInbox =
+    selected?.kind === 'approval' && task?.status === 'human-review';
 
   useEffect(() => {
     setCommandText('');
@@ -1725,6 +1732,22 @@ function InboxView({
       setCommandText('');
       setCommandState('Added to task chat');
     }
+  };
+  const recordInboxApproval = (status: 'approved' | 'changes-requested') => {
+    if (!task) {
+      setCommandState('No linked task');
+      return;
+    }
+
+    const saved = onRecordHumanReview(task.id, {
+      note:
+        status === 'approved'
+          ? 'Inbox triage: human approved this task.'
+          : 'Inbox triage: human requested changes before merge.',
+      status,
+    });
+
+    setCommandState(saved ? 'Review recorded' : 'Review not available');
   };
 
   return (
@@ -1829,14 +1852,36 @@ function InboxView({
                 'A project notification is ready for triage.'}
             </p>
             {task && (
-              <button
-                type="button"
-                onClick={() => onOpenTask(task.id)}
-                className="mt-5 inline-flex h-9 items-center gap-2 rounded-[6px] border border-[#2a2c31] bg-[#202227] px-3 text-xs font-semibold text-[#cfd2da] transition-colors hover:border-[#3a3d46]"
-              >
-                <ListChecksIcon className="size-4" weight="bold" />
-                Open task
-              </button>
+              <div className="mt-5 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => onOpenTask(task.id)}
+                  className="inline-flex h-9 items-center gap-2 rounded-[6px] border border-[#2a2c31] bg-[#202227] px-3 text-xs font-semibold text-[#cfd2da] transition-colors hover:border-[#3a3d46]"
+                >
+                  <ListChecksIcon className="size-4" weight="bold" />
+                  Open task
+                </button>
+                {canReviewFromInbox && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => recordInboxApproval('approved')}
+                      className="inline-flex h-9 items-center gap-2 rounded-[6px] border border-[#31553a] bg-[#172219] px-3 text-xs font-semibold text-[#78d16d] transition-colors hover:border-[#427049]"
+                    >
+                      <CheckCircleIcon className="size-4" weight="bold" />
+                      Approve
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => recordInboxApproval('changes-requested')}
+                      className="inline-flex h-9 items-center gap-2 rounded-[6px] border border-[#553131] bg-[#211719] px-3 text-xs font-semibold text-[#f26d6d] transition-colors hover:border-[#6b3b3b]"
+                    >
+                      <XIcon className="size-4" weight="bold" />
+                      Request changes
+                    </button>
+                  </>
+                )}
+              </div>
             )}
           </div>
 
@@ -1931,7 +1976,8 @@ function InboxView({
               <span
                 className={cn(
                   'text-xs font-semibold',
-                  commandState === 'Added to task chat'
+                  commandState === 'Added to task chat' ||
+                    commandState === 'Review recorded'
                     ? 'text-[#78d16d]'
                     : 'text-[#f26d6d]'
                 )}
@@ -6881,6 +6927,7 @@ export function KavbanDashboard() {
                 setProjectTab('tasks');
                 setActiveSection('workspace');
               }}
+              onRecordHumanReview={recordHumanReview}
               selectedInboxId={selectedInboxId}
               onSelectInbox={setSelectedInboxId}
               tasks={project.tasks}

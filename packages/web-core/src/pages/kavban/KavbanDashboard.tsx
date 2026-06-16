@@ -1944,39 +1944,264 @@ function WorkspaceHome({
   const [newProjectName, setNewProjectName] = useState('');
   const countTasks = (statuses: TaskStatus[]) =>
     project.tasks.filter((task) => statuses.includes(task.status)).length;
+  const readyTasks = project.tasks.filter((task) => task.status === 'ready');
+  const blockedReadyTasks = readyTasks
+    .map((task) => ({
+      blockerSummary: getTaskBlockerSummary(
+        task,
+        project.tasks,
+        connectors,
+        project.contextFiles
+      ),
+      task,
+    }))
+    .filter(
+      (item): item is { blockerSummary: TaskBlockerSummary; task: Task } =>
+        Boolean(item.blockerSummary)
+    );
+  const runnableReadyCount = readyTasks.length - blockedReadyTasks.length;
+  const disconnectedConnectors = kavbanConnectorOrder
+    .map((connectorId) => connectors[connectorId])
+    .filter((connector) => !connector.connected);
+  const injectedContextCount = project.contextFiles.filter(
+    (file) => file.injected
+  ).length;
+  const fixRequiredTasks = project.tasks.filter(
+    (task) => task.status === 'fix-required'
+  );
+  const mergeReadyCount = project.tasks.filter(
+    (task) =>
+      task.status === 'pr-created' &&
+      task.approvalStatus === 'approved' &&
+      Boolean(task.pr)
+  ).length;
+  const openTaskCount = project.tasks.filter(
+    (task) => task.status !== 'done'
+  ).length;
+  const attentionItems = [
+    ...blockedReadyTasks.slice(0, 3).map((item) => ({
+      icon: ClockIcon,
+      label: item.task.key,
+      title: item.task.title,
+      detail: item.blockerSummary.title.split('\n')[0],
+      tone: 'text-[#f2d14b]',
+    })),
+    ...fixRequiredTasks.slice(0, 3).map((task) => ({
+      icon: XIcon,
+      label: task.key,
+      title: task.title,
+      detail: 'Fixes required before this can return to review',
+      tone: 'text-[#f26d6d]',
+    })),
+    ...disconnectedConnectors.map((connector) => ({
+      icon: connectorIconById[connector.id],
+      label: connector.name,
+      title: 'Connector setup needed',
+      detail: connector.status,
+      tone: 'text-[#f3cfa8]',
+    })),
+  ].slice(0, 5);
 
-  const stats = [
+  const healthStats = [
     {
-      label: 'Ready',
-      value: String(countTasks(['ready'])),
+      label: 'Runnable',
+      value: String(runnableReadyCount),
+      caption: `${blockedReadyTasks.length} waiting`,
       icon: LightningIcon,
-      color: '#f2d14b',
+      color: '#78d16d',
     },
     {
       label: 'Running',
       value: String(countTasks(['progress'])),
+      caption: `${project.tasks.filter((task) => task.lockedBy).length} locked`,
       icon: CircleIcon,
-      color: '#f2d14b',
+      color: '#8bbcff',
     },
     {
-      label: 'In review',
-      value: String(
-        countTasks(['ai-review', 'fix-required', 'human-review'])
-      ),
+      label: 'Review',
+      value: String(countTasks(['ai-review', 'human-review'])),
+      caption: `${fixRequiredTasks.length} fix required`,
       icon: MagicWandIcon,
-      color: '#6aa7ff',
+      color: '#d6cdfd',
     },
     {
-      label: 'PR pipeline',
+      label: 'PRs',
       value: String(countTasks(['approved', 'pr-created'])),
+      caption: `${mergeReadyCount} merge ready`,
       icon: GitPullRequestIcon,
       color: '#58b957',
+    },
+    {
+      label: 'Done',
+      value: String(countTasks(['done'])),
+      caption: `${openTaskCount} still open`,
+      icon: CheckCircleIcon,
+      color: '#78d16d',
+    },
+    {
+      label: 'Context',
+      value: `${injectedContextCount}/${project.contextFiles.length}`,
+      caption: 'files injected',
+      icon: FileTextIcon,
+      color: '#8bbcff',
+    },
+    {
+      label: 'Connectors',
+      value: `${kavbanConnectorOrder.length - disconnectedConnectors.length}/${kavbanConnectorOrder.length}`,
+      caption:
+        disconnectedConnectors.length === 0
+          ? 'all connected'
+          : `${disconnectedConnectors.length} setup`,
+      icon: PlugsConnectedIcon,
+      color: disconnectedConnectors.length === 0 ? '#78d16d' : '#f3cfa8',
     },
   ];
 
   return (
     <div className="h-full overflow-y-auto bg-[#101113] px-6 py-7">
       <div className="mx-auto max-w-6xl">
+        <section className="mb-6 rounded-[8px] border border-[#24262b] bg-[#17181b] p-5">
+          <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-[#dce0e8]">
+                Orchestration health
+              </h2>
+              <p className="mt-1 text-sm text-[#858b96]">
+                Agent queues, review gates, context, and connector readiness.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => onTabChange('tasks')}
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-[6px] border border-[#2a2c31] bg-[#202227] px-3 text-xs font-semibold text-[#cfd2da] transition-colors hover:border-[#3a3d46]"
+            >
+              <ListChecksIcon className="size-4" weight="bold" />
+              Open tasks
+            </button>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+            {healthStats.map((stat) => {
+              const Icon = stat.icon;
+
+              return (
+                <div
+                  key={stat.label}
+                  className="rounded-[7px] border border-[#24262b] bg-[#111214] p-3"
+                >
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <Icon
+                      className="size-4 shrink-0"
+                      style={{ color: stat.color }}
+                      weight="bold"
+                    />
+                    <span className="truncate font-ibm-plex-mono text-lg font-semibold text-[#dce0e8]">
+                      {stat.value}
+                    </span>
+                  </div>
+                  <p className="truncate text-sm font-semibold text-[#cfd2da]">
+                    {stat.label}
+                  </p>
+                  <p className="mt-1 truncate text-xs text-[#777d88]">
+                    {stat.caption}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="mt-5 grid gap-4 xl:grid-cols-[1fr_0.8fr]">
+            <div className="rounded-[7px] border border-[#24262b] bg-[#111214] p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold text-[#dce0e8]">
+                  Workflow load
+                </h3>
+                <span className="font-ibm-plex-mono text-xs text-[#777d88]">
+                  {project.tasks.length} tasks
+                </span>
+              </div>
+              <div className="space-y-2">
+                {workflowColumns.map((column) => {
+                  const taskCount = countTasks([column.id]);
+                  const percent =
+                    project.tasks.length > 0
+                      ? (taskCount / project.tasks.length) * 100
+                      : 0;
+
+                  return (
+                    <div
+                      key={column.id}
+                      className="grid grid-cols-[120px_1fr_32px] items-center gap-3 text-xs"
+                    >
+                      <span className="truncate font-semibold text-[#9ca1ad]">
+                        {column.label}
+                      </span>
+                      <span className="h-1.5 overflow-hidden rounded-full bg-[#24262b]">
+                        <span
+                          className="block h-full rounded-full"
+                          style={{
+                            backgroundColor: column.color,
+                            width: `${percent}%`,
+                          }}
+                        />
+                      </span>
+                      <span className="text-right font-ibm-plex-mono text-[#777d88]">
+                        {taskCount}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="rounded-[7px] border border-[#24262b] bg-[#111214] p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold text-[#dce0e8]">
+                  Needs attention
+                </h3>
+                <span className="font-ibm-plex-mono text-xs text-[#777d88]">
+                  {attentionItems.length}
+                </span>
+              </div>
+              {attentionItems.length > 0 ? (
+                <div className="space-y-2">
+                  {attentionItems.map((item) => {
+                    const Icon = item.icon;
+
+                    return (
+                      <div
+                        key={`${item.label}-${item.title}`}
+                        className="grid min-h-10 grid-cols-[auto_64px_1fr] items-center gap-2 rounded-[6px] border border-[#24262b] bg-[#17181b] px-2.5 py-2 text-xs"
+                      >
+                        <Icon
+                          className={cn('size-4 shrink-0', item.tone)}
+                          weight="bold"
+                        />
+                        <span className="truncate font-ibm-plex-mono text-[#777d88]">
+                          {item.label}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block truncate font-semibold text-[#cfd2da]">
+                            {item.title}
+                          </span>
+                          <span className="block truncate text-[#777d88]">
+                            {item.detail}
+                          </span>
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="flex min-h-24 items-center gap-2 rounded-[6px] border border-[#24262b] bg-[#17181b] px-3 text-sm text-[#858b96]">
+                  <CheckCircleIcon className="size-4 text-[#78d16d]" weight="fill" />
+                  No active blockers
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+
         <section className="mb-6 rounded-[8px] border border-[#24262b] bg-[#17181b] p-5">
           <div className="mb-4 flex items-center justify-between gap-3">
             <h2 className="text-lg font-semibold text-[#dce0e8]">Projects</h2>
@@ -2067,33 +2292,6 @@ function WorkspaceHome({
             </div>
           )}
         </section>
-
-        <div className="mb-6 grid gap-4 md:grid-cols-4">
-          {stats.map((stat) => {
-            const Icon = stat.icon;
-
-            return (
-              <div
-                key={stat.label}
-                className="rounded-[8px] border border-[#24262b] bg-[#17181b] p-4"
-              >
-                <div className="mb-4 flex items-center justify-between">
-                  <Icon
-                    className="size-5"
-                    style={{ color: stat.color }}
-                    weight="bold"
-                  />
-                  <span className="text-2xl font-semibold text-[#dce0e8]">
-                    {stat.value}
-                  </span>
-                </div>
-                <p className="text-sm font-medium text-[#858b96]">
-                  {stat.label}
-                </p>
-              </div>
-            );
-          })}
-        </div>
 
         <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
           <section className="rounded-[8px] border border-[#24262b] bg-[#17181b] p-5">

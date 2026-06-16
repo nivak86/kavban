@@ -2550,6 +2550,78 @@ function TaskEditForm({
   );
 }
 
+function TaskReadinessChecklist({
+  items,
+}: {
+  items: Array<{
+    detail: string;
+    label: string;
+    ready: boolean;
+  }>;
+}) {
+  const readyCount = items.filter((item) => item.ready).length;
+  const allReady = readyCount === items.length;
+
+  return (
+    <div className="rounded-[7px] border border-[#24262b] bg-[#17181b] p-3">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-sm font-semibold text-[#dce0e8]">
+          <ShieldCheckIcon className="size-4 text-[#858b96]" weight="bold" />
+          Run readiness
+        </div>
+        <span
+          className={cn(
+            'rounded-full border px-2 py-0.5 text-[11px] font-semibold',
+            allReady
+              ? 'border-[#31553a] text-[#78d16d]'
+              : 'border-[#554531] text-[#f3cfa8]'
+          )}
+        >
+          {readyCount}/{items.length}
+        </span>
+      </div>
+      <div className="space-y-2">
+        {items.map((item) => (
+          <div
+            key={item.label}
+            className="flex items-start gap-2 text-sm text-[#aeb3bd]"
+          >
+            {item.ready ? (
+              <CheckCircleIcon
+                className="mt-0.5 size-4 shrink-0 text-[#78d16d]"
+                weight="fill"
+              />
+            ) : (
+              <CircleIcon
+                className="mt-0.5 size-4 shrink-0 text-[#f3cfa8]"
+                weight="bold"
+              />
+            )}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-3">
+                <span className="font-semibold text-[#cfd2da]">
+                  {item.label}
+                </span>
+                <span
+                  className={cn(
+                    'shrink-0 text-xs font-semibold',
+                    item.ready ? 'text-[#78d16d]' : 'text-[#f3cfa8]'
+                  )}
+                >
+                  {item.ready ? 'Ready' : 'Waiting'}
+                </span>
+              </div>
+              <p className="mt-0.5 truncate text-xs text-[#777d88]">
+                {item.detail}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function TaskDetailPanel({
   connectors,
   contextFiles,
@@ -2680,6 +2752,59 @@ function TaskDetailPanel({
     task.testStatus === 'passed' &&
     task.status !== 'done' &&
     needsFreshAiReview;
+  const readinessItems = [
+    {
+      detail:
+        blockingDependencies.length === 0
+          ? dependencyItems.length > 0
+            ? `${dependencyItems.length} dependenc${dependencyItems.length === 1 ? 'y' : 'ies'} checked`
+            : 'No dependency blockers'
+          : `Waiting on ${blockingDependencies
+              .map((item) => item.task?.key ?? item.key)
+              .join(', ')}`,
+      label: 'Dependencies',
+      ready: blockingDependencies.length === 0,
+    },
+    {
+      detail:
+        missingContextFiles.length === 0
+          ? `${getTaskRunContextFiles(contextFiles, task).length} files available`
+          : `Missing ${missingContextFiles.join(', ')}`,
+      label: 'Context pack',
+      ready: missingContextFiles.length === 0,
+    },
+    {
+      detail:
+        missingRunConnectors.length === 0
+          ? getTaskRunConnectorIds(task)
+              .map((connectorId) => connectors[connectorId].name)
+              .join(', ')
+          : `Setup ${missingRunConnectors
+              .map((connector) => connector.name)
+              .join(', ')}`,
+      label: 'Connectors',
+      ready: missingRunConnectors.length === 0,
+    },
+    {
+      detail:
+        taskLockAgent && task.lockedAt
+          ? `${taskLockAgent.name} locked at ${new Date(task.lockedAt).toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}`
+          : 'No active worker lock',
+      label: 'Worker lock',
+      ready: !isTaskLocked,
+    },
+    {
+      detail:
+        task.status === 'done'
+          ? 'Closed tasks cannot be run'
+          : 'Task is open for agent work',
+      label: 'Task state',
+      ready: task.status !== 'done',
+    },
+  ];
 
   useEffect(() => {
     setCommentText('');
@@ -3117,6 +3242,8 @@ function TaskDetailPanel({
             </div>
           ))}
         </div>
+
+        <TaskReadinessChecklist items={readinessItems} />
 
         {task.intake && (
           <div>

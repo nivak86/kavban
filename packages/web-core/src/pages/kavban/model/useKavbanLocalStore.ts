@@ -389,6 +389,10 @@ function normalizeAgentRouting(input: KavbanAgentRoutingInput) {
   };
 }
 
+function isHumanGateRequired(value: string) {
+  return !/(optional|off|none|skip)/i.test(value);
+}
+
 function replaceContextFilePath(paths: string[], from: string, to: string) {
   return Array.from(
     new Set(paths.map((path) => (path === from ? to : path)).filter(Boolean))
@@ -1979,6 +1983,23 @@ export function useKavbanLocalStore() {
         reviewerAgentId: input.reviewerAgentId,
         role,
       },
+      projects: current.projects.map((project) => {
+        if (project.id !== current.activeProjectId) {
+          return project;
+        }
+
+        const currentRouting = getProjectAgentRouting(project);
+
+        return {
+          ...project,
+          agentRouting: {
+            ...currentRouting,
+            defaultAgentId: input.defaultAgentId,
+            reviewerAgentId: input.reviewerAgentId,
+            humanReviewRequired: isHumanGateRequired(humanGate),
+          },
+        };
+      }),
       updatedAt: nowIso(),
     }));
 

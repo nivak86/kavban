@@ -977,6 +977,8 @@ function QueueMonitor({
   runnableCount: number;
   waitingCount: number;
 }) {
+  const hasActiveRuns = activeRunTasks.length > 0;
+  const hasReadyItems = readyItems.length > 0;
   const stats = [
     {
       label: 'Ready queue',
@@ -1050,8 +1052,11 @@ function QueueMonitor({
         </div>
 
         <div className="min-w-0 rounded-[7px] border border-[#24262b] bg-[#17181b] p-2">
-          {readyItems.length > 0 ? (
-            <div className="space-y-1">
+          {hasReadyItems && (
+            <div>
+              <div className="mb-1 px-2 text-[11px] font-semibold text-[#777d88]">
+                Ready queue
+              </div>
               {readyItems.slice(0, 4).map((item) => (
                 <button
                   key={item.task.id}
@@ -1076,7 +1081,42 @@ function QueueMonitor({
                 </button>
               ))}
             </div>
-          ) : (
+          )}
+
+          {hasActiveRuns && (
+            <div
+              className={cn(
+                hasReadyItems && 'mt-2 border-t border-[#24262b] pt-2'
+              )}
+            >
+              <div className="mb-1 px-2 text-[11px] font-semibold text-[#777d88]">
+                Active runs
+              </div>
+              <div className="space-y-1">
+                {activeRunTasks.slice(0, 4).map((task) => (
+                  <button
+                    key={task.id}
+                    type="button"
+                    onClick={() => onSelectTask(task.id)}
+                    className="grid min-h-10 w-full grid-cols-[72px_minmax(0,1fr)_auto] items-center gap-2 rounded-[6px] px-2 text-left text-xs transition-colors hover:bg-[#202227]"
+                  >
+                    <span className="font-ibm-plex-mono text-[#777d88]">
+                      {task.key}
+                    </span>
+                    <span className="min-w-0 truncate font-semibold text-[#cfd2da]">
+                      {task.title}
+                    </span>
+                    <span className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-[5px] border border-[#334b70] bg-[#141c2a] px-2 text-xs font-medium text-[#8bbcff]">
+                      <TerminalIcon className="size-3.5" weight="bold" />
+                      {getTaskAgent(task).name}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!hasReadyItems && !hasActiveRuns && (
             <div className="flex min-h-10 items-center gap-2 rounded-[6px] px-2 text-sm text-[#777d88]">
               <ClockIcon className="size-4" weight="bold" />
               No ready tasks queued

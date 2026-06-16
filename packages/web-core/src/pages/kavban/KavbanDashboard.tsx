@@ -978,9 +978,11 @@ function WaitingPill({ summary }: { summary: TaskBlockerSummary }) {
 function QueueMonitor({
   activeRunTasks,
   aiReviewTasks,
+  humanReviewTasks,
   onDismissSummary,
   onCreateAiReview,
   onRecordActiveRunCheck,
+  onRecordHumanReview,
   onSelectTask,
   queueSummary,
   readyItems,
@@ -989,6 +991,7 @@ function QueueMonitor({
 }: {
   activeRunTasks: Task[];
   aiReviewTasks: Task[];
+  humanReviewTasks: Task[];
   onDismissSummary: () => void;
   onCreateAiReview: (
     taskId: string,
@@ -999,6 +1002,10 @@ function QueueMonitor({
     runId: string,
     status: 'failed' | 'passed'
   ) => void;
+  onRecordHumanReview: (
+    taskId: string,
+    input: KavbanRecordHumanReviewInput
+  ) => boolean;
   onSelectTask: (taskId: string) => void;
   queueSummary: string;
   readyItems: QueueTaskItem[];
@@ -1007,6 +1014,7 @@ function QueueMonitor({
 }) {
   const hasActiveRuns = activeRunTasks.length > 0;
   const hasAiReviewTasks = aiReviewTasks.length > 0;
+  const hasHumanReviewTasks = humanReviewTasks.length > 0;
   const hasReadyItems = readyItems.length > 0;
   const stats = [
     {
@@ -1034,6 +1042,11 @@ function QueueMonitor({
       value: aiReviewTasks.length,
       tone: aiReviewTasks.length > 0 ? 'text-[#d6cdfd]' : 'text-[#777d88]',
     },
+    {
+      label: 'Human review',
+      value: humanReviewTasks.length,
+      tone: humanReviewTasks.length > 0 ? 'text-[#f2d14b]' : 'text-[#777d88]',
+    },
   ];
 
   return (
@@ -1058,7 +1071,7 @@ function QueueMonitor({
               </button>
             )}
           </div>
-          <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-2 lg:grid-cols-6">
             {stats.map((stat) => (
               <div
                 key={stat.label}
@@ -1242,7 +1255,72 @@ function QueueMonitor({
             </div>
           )}
 
-          {!hasReadyItems && !hasActiveRuns && !hasAiReviewTasks && (
+          {hasHumanReviewTasks && (
+            <div
+              className={cn(
+                (hasReadyItems || hasActiveRuns || hasAiReviewTasks) &&
+                  'mt-2 border-t border-[#24262b] pt-2'
+              )}
+            >
+              <div className="mb-1 px-2 text-[11px] font-semibold text-[#777d88]">
+                Human review
+              </div>
+              <div className="space-y-1">
+                {humanReviewTasks.slice(0, 4).map((task) => (
+                  <div
+                    key={task.id}
+                    className="grid min-h-10 w-full grid-cols-[72px_minmax(0,1fr)_auto_auto_auto] items-center gap-2 rounded-[6px] px-2 text-xs transition-colors hover:bg-[#202227]"
+                  >
+                    <span className="font-ibm-plex-mono text-[#777d88]">
+                      {task.key}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => onSelectTask(task.id)}
+                      className="min-w-0 truncate text-left font-semibold text-[#cfd2da]"
+                    >
+                      {task.title}
+                    </button>
+                    <span className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-[5px] border border-[#5b4a22] bg-[#241f15] px-2 text-xs font-medium text-[#f2d14b]">
+                      <ShieldCheckIcon className="size-3.5" weight="bold" />
+                      Human gate
+                    </span>
+                    <button
+                      type="button"
+                      aria-label={`Approve ${task.key} human review`}
+                      onClick={() =>
+                        onRecordHumanReview(task.id, {
+                          note: 'Human approved from the Kavban queue monitor.',
+                          status: 'approved',
+                        })
+                      }
+                      className="flex size-6 shrink-0 items-center justify-center rounded-[5px] border border-[#31553a] bg-[#172219] text-[#78d16d] transition-colors hover:border-[#427049]"
+                    >
+                      <CheckCircleIcon className="size-3.5" weight="fill" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Request changes for ${task.key} human review`}
+                      onClick={() =>
+                        onRecordHumanReview(task.id, {
+                          note: 'Human requested changes from the Kavban queue monitor.',
+                          status: 'changes-requested',
+                        })
+                      }
+                      className="flex size-6 shrink-0 items-center justify-center rounded-[5px] border border-[#553131] bg-[#211719] text-[#f26d6d] transition-colors hover:border-[#6b3b3b]"
+                    >
+                      <XIcon className="size-3.5" weight="bold" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!hasReadyItems &&
+            !hasActiveRuns &&
+            !hasAiReviewTasks &&
+            !hasHumanReviewTasks && (
             <div className="flex min-h-10 items-center gap-2 rounded-[6px] px-2 text-sm text-[#777d88]">
               <ClockIcon className="size-4" weight="bold" />
               No ready tasks queued
@@ -4439,6 +4517,10 @@ function WorkspaceTasks({
       ),
     [tasks]
   );
+  const humanReviewTasks = useMemo(
+    () => tasks.filter((task) => task.status === 'human-review'),
+    [tasks]
+  );
 
   const openCreateTask = (status: TaskStatus = 'backlog') => {
     setTaskCreateStatus(status);
@@ -4624,6 +4706,7 @@ function WorkspaceTasks({
         <QueueMonitor
           activeRunTasks={activeRunTasks}
           aiReviewTasks={aiReviewTasks}
+          humanReviewTasks={humanReviewTasks}
           onDismissSummary={() => setQueueSummary('')}
           onCreateAiReview={onCreateAiReview}
           onRecordActiveRunCheck={(taskId, runId, status) =>
@@ -4636,6 +4719,7 @@ function WorkspaceTasks({
               status,
             })
           }
+          onRecordHumanReview={onRecordHumanReview}
           onSelectTask={handleSelectTask}
           queueSummary={queueSummary}
           readyItems={readyQueueItems}

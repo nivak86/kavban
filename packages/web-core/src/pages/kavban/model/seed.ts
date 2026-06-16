@@ -9,6 +9,7 @@ import type {
   KavbanTask,
   KavbanWorkflowColumn,
 } from './types';
+import { getKavbanDefaultNotificationSettings } from './notifications';
 
 export const kavbanAgents: Record<KavbanAgentId, KavbanAgent> = {
   codex: {
@@ -450,4 +451,5 @@ export const kavbanProfile: KavbanProfile = {
   defaultAgentId: 'codex',
   reviewerAgentId: 'codex',
   humanGate: 'Always on',
+  notifications: getKavbanDefaultNotificationSettings(),
 };

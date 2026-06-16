@@ -43,6 +43,27 @@ export type KavbanTaskEventKind =
   | 'merge-completed'
   | 'rollback-opened';
 
+export type KavbanNotificationEventKind = Extract<
+  KavbanTaskEventKind,
+  | 'task-created'
+  | 'task-imported'
+  | 'task-locked'
+  | 'task-unlocked'
+  | 'agent-started'
+  | 'tests-failed'
+  | 'ai-review-completed'
+  | 'approval-needed'
+  | 'changes-requested'
+  | 'pr-opened'
+  | 'merge-completed'
+  | 'rollback-opened'
+>;
+
+export type KavbanNotificationSettings = Record<
+  KavbanNotificationEventKind,
+  boolean
+>;
+
 export type KavbanRepository = {
   provider: 'github';
   owner: string;
@@ -233,4 +254,5 @@ export type KavbanProfile = {
   defaultAgentId: KavbanAgentId;
   reviewerAgentId: KavbanAgentId;
   humanGate: string;
+  notifications: KavbanNotificationSettings;
 };

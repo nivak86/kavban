@@ -43,6 +43,7 @@ import {
   kavbanAgents,
   kavbanConnectorOrder,
   kavbanDefaultAgentRouting,
+  kavbanNotificationRules,
   kavbanWorkflowColumns,
   useKavbanLocalStore,
 } from './model';
@@ -59,6 +60,8 @@ import type {
   KavbanImportCodexTaskResult,
   KavbanInboxKind,
   KavbanInboxItem as InboxItem,
+  KavbanNotificationEventKind,
+  KavbanNotificationSettings,
   KavbanProfile as Profile,
   KavbanProfileInput,
   KavbanProject as Project,
@@ -3956,7 +3959,16 @@ function WorkspaceView({
   );
 }
 
-function SettingsView() {
+function SettingsView({
+  notificationSettings,
+  onNotificationSettingChange,
+}: {
+  notificationSettings: KavbanNotificationSettings;
+  onNotificationSettingChange: (
+    kind: KavbanNotificationEventKind,
+    enabled: boolean
+  ) => void;
+}) {
   return (
     <div className="h-full overflow-y-auto bg-[#101113]">
       <TopBar title="Settings" eyebrow="App" />
@@ -4000,6 +4012,61 @@ function SettingsView() {
             </section>
           );
         })}
+
+        <section className="rounded-[8px] border border-[#24262b] bg-[#17181b] p-5 md:col-span-2">
+          <div className="mb-5 flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-base font-semibold text-[#dce0e8]">
+                Notification rules
+              </h2>
+              <p className="mt-1 text-sm text-[#858b96]">
+                Choose which task events appear in the Inbox triage feed.
+              </p>
+            </div>
+            <RocketIcon className="size-5 shrink-0 text-[#858b96]" weight="bold" />
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-2">
+            {kavbanNotificationRules.map((rule) => {
+              const enabled = notificationSettings[rule.kind];
+
+              return (
+                <label
+                  key={rule.kind}
+                  className={cn(
+                    'flex cursor-pointer items-start gap-3 rounded-[7px] border p-3 transition-colors',
+                    enabled
+                      ? 'border-[#31553a] bg-[#141d16]'
+                      : 'border-[#24262b] bg-[#111214] hover:bg-[#191b1f]'
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    checked={enabled}
+                    onChange={(event) =>
+                      onNotificationSettingChange(
+                        rule.kind,
+                        event.target.checked
+                      )
+                    }
+                    className="mt-0.5 size-4 accent-[#78d16d]"
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold text-[#dce0e8]">
+                      {rule.label}
+                    </span>
+                    <span className="mt-1 block text-xs leading-5 text-[#858b96]">
+                      {rule.description}
+                    </span>
+                  </span>
+                  <span className="ml-auto rounded-full border border-[#2a2c31] px-2 py-0.5 text-[11px] font-semibold text-[#9ca1ad]">
+                    {rule.status}
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        </section>
       </div>
     </div>
   );
@@ -4221,6 +4288,7 @@ export function KavbanDashboard() {
     updateAgentRouting,
     updateConnector,
     updateContextFile,
+    updateNotificationSetting,
     updateProfile,
     updateProjectBrief,
     updateProjectRepository,
@@ -4315,7 +4383,14 @@ export function KavbanDashboard() {
               taskView={taskView}
             />
           )}
-          {activeSection === 'settings' && <SettingsView />}
+          {activeSection === 'settings' && (
+            <SettingsView
+              notificationSettings={profile.notifications}
+              onNotificationSettingChange={(kind, enabled) =>
+                updateNotificationSetting({ enabled, kind })
+              }
+            />
+          )}
           {activeSection === 'profile' && (
             <ProfileView
               onProfileChange={updateProfile}

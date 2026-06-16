@@ -1,4 +1,5 @@
 import { kavbanInboxItems, kavbanProfile, kavbanProject } from './seed';
+import { normalizeKavbanNotificationSettings } from './notifications';
 import type { KavbanInboxItem, KavbanProfile, KavbanProject } from './types';
 
 export const KAVBAN_STORAGE_VERSION = 2;
@@ -39,6 +40,14 @@ export function createKavbanSeedState(): KavbanLocalState {
     profile: structuredClone(kavbanProfile),
     projects: [project],
     updatedAt: nowIso(),
+  };
+}
+
+function normalizeKavbanProfile(profile: KavbanProfile): KavbanProfile {
+  return {
+    ...kavbanProfile,
+    ...profile,
+    notifications: normalizeKavbanNotificationSettings(profile.notifications),
   };
 }
 
@@ -107,7 +116,10 @@ function isKavbanLocalState(value: unknown): value is KavbanLocalState {
 
 export function migrateKavbanLocalState(value: unknown): KavbanLocalState {
   if (isKavbanLocalState(value)) {
-    return value;
+    return {
+      ...value,
+      profile: normalizeKavbanProfile(value.profile),
+    };
   }
 
   if (isKavbanLocalStateV1(value)) {
@@ -115,7 +127,7 @@ export function migrateKavbanLocalState(value: unknown): KavbanLocalState {
       version: KAVBAN_STORAGE_VERSION,
       activeProjectId: value.project.id,
       inboxItems: value.inboxItems,
-      profile: value.profile,
+      profile: normalizeKavbanProfile(value.profile),
       projects: [value.project],
       updatedAt: nowIso(),
     };

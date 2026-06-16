@@ -6,6 +6,10 @@ import {
   type KavbanLocalState,
 } from './storage';
 import { kavbanAgents, kavbanDefaultAgentRouting, kavbanProject } from './seed';
+import {
+  createKavbanInboxNotifications,
+  normalizeKavbanNotificationSettings,
+} from './notifications';
 import type {
   KavbanAgentId,
   KavbanAgentRouting,
@@ -14,6 +18,7 @@ import type {
   KavbanConnector,
   KavbanConnectorId,
   KavbanContextFile,
+  KavbanNotificationEventKind,
   KavbanProfile,
   KavbanProject,
   KavbanReviewStatus,
@@ -90,6 +95,11 @@ export type KavbanProfileInput = Pick<
   | 'reviewerAgentId'
   | 'role'
 >;
+
+export type KavbanNotificationSettingInput = {
+  enabled: boolean;
+  kind: KavbanNotificationEventKind;
+};
 
 const taskStateByStatus: Record<KavbanTaskStatus, string> = {
   backlog: 'Draft',
@@ -1726,6 +1736,25 @@ export function useKavbanLocalStore() {
     return true;
   }, []);
 
+  const updateNotificationSetting = useCallback(
+    (input: KavbanNotificationSettingInput) => {
+      setState((current) => ({
+        ...current,
+        profile: {
+          ...current.profile,
+          notifications: {
+            ...normalizeKavbanNotificationSettings(
+              current.profile.notifications
+            ),
+            [input.kind]: input.enabled,
+          },
+        },
+        updatedAt: nowIso(),
+      }));
+    },
+    []
+  );
+
   return {
     activeProjectId: state.activeProjectId,
     addTaskComment,
@@ -1736,7 +1765,13 @@ export function useKavbanLocalStore() {
     deleteContextFile,
     deleteTask,
     importCodexTask,
-    inboxItems: state.inboxItems,
+    inboxItems: createKavbanInboxNotifications({
+      manualItems: state.inboxItems,
+      projects: state.projects,
+      settings: normalizeKavbanNotificationSettings(
+        state.profile.notifications
+      ),
+    }),
     mergeTaskPullRequest,
     moveTask,
     openRollbackPullRequest,
@@ -1752,6 +1787,7 @@ export function useKavbanLocalStore() {
     updateAgentRouting,
     updateConnector,
     updateContextFile,
+    updateNotificationSetting,
     updateProfile,
     updateProjectBrief,
     updateProjectRepository,

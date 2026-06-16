@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
+  createKavbanSeedState,
   nowIso,
   readKavbanLocalState,
   writeKavbanLocalState,
@@ -626,6 +627,10 @@ export function useKavbanLocalStore() {
   useEffect(() => {
     writeKavbanLocalState(state);
   }, [state]);
+
+  const resetDemoState = useCallback(() => {
+    setState(createKavbanSeedState());
+  }, []);
 
   const updateProjectBrief = useCallback((brief: string) => {
     setState((current) => ({
@@ -2029,6 +2034,7 @@ export function useKavbanLocalStore() {
     selectProject,
     startAgentRun,
     pauseAgentRun,
+    resetDemoState,
     state,
     updateAgentRouting,
     updateConnector,

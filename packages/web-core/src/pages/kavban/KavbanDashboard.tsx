@@ -5497,6 +5497,7 @@ function WorkspaceSettings({
   onCreateContextFile,
   onDeleteContextFile,
   onRepositoryChange,
+  onResetDemoState,
   onToggleConnector,
   onUpdateContextFile,
 }: {
@@ -5510,6 +5511,7 @@ function WorkspaceSettings({
   onCreateContextFile: (input: KavbanContextFileInput) => boolean;
   onDeleteContextFile: (path: string) => boolean;
   onRepositoryChange: (input: KavbanRepositoryInput) => boolean;
+  onResetDemoState: () => void;
   onToggleConnector: (id: ConnectorId) => void;
   onUpdateContextFile: (path: string, input: KavbanContextFileInput) => boolean;
 }) {
@@ -5529,6 +5531,7 @@ function WorkspaceSettings({
   const [newContextPath, setNewContextPath] = useState('');
   const [newContextPurpose, setNewContextPurpose] = useState('');
   const [newContextInjected, setNewContextInjected] = useState(true);
+  const [isConfirmingReset, setIsConfirmingReset] = useState(false);
   const [editingContextPath, setEditingContextPath] = useState<string | null>(
     null
   );
@@ -6336,6 +6339,40 @@ function WorkspaceSettings({
               </div>
             ))}
           </div>
+          <div className="mt-3 rounded-[7px] border border-[#553131] bg-[#111214] p-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-[#f26d6d]">
+                  Reset demo state
+                </p>
+                <p className="mt-2 text-sm leading-6 text-[#9ca1ad]">
+                  Restore seed projects, tasks, inbox items, connectors, and
+                  profile defaults for this browser.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isConfirmingReset) {
+                    setIsConfirmingReset(true);
+                    return;
+                  }
+
+                  onResetDemoState();
+                  setIsConfirmingReset(false);
+                }}
+                className={cn(
+                  'inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-[6px] border px-3 text-xs font-semibold transition-colors',
+                  isConfirmingReset
+                    ? 'border-[#553131] bg-[#211719] text-[#f26d6d] hover:border-[#6b3b3b]'
+                    : 'border-[#3b2a2d] text-[#f26d6d] hover:bg-[#211719]'
+                )}
+              >
+                <TrashIcon className="size-4" weight="bold" />
+                {isConfirmingReset ? 'Confirm reset' : 'Reset demo'}
+              </button>
+            </div>
+          </div>
         </section>
       </div>
     </div>
@@ -6366,6 +6403,7 @@ function WorkspaceView({
   onRecordHumanReview,
   onRecordRunCheck,
   onRepositoryChange,
+  onResetDemoState,
   onSelectProject,
   onSelectTask,
   onStartAgentRun,
@@ -6417,6 +6455,7 @@ function WorkspaceView({
     input: KavbanRecordRunCheckInput
   ) => boolean;
   onRepositoryChange: (input: KavbanRepositoryInput) => boolean;
+  onResetDemoState: () => void;
   onSelectProject: (id: string) => void;
   onSelectTask: (id: string) => void;
   onStartAgentRun: (taskId: string) => string | null;
@@ -6505,6 +6544,7 @@ function WorkspaceView({
             onCreateContextFile={onCreateContextFile}
             onDeleteContextFile={onDeleteContextFile}
             onRepositoryChange={onRepositoryChange}
+            onResetDemoState={onResetDemoState}
             onToggleConnector={onToggleConnector}
             onUpdateContextFile={onUpdateContextFile}
           />
@@ -6840,6 +6880,7 @@ export function KavbanDashboard() {
     pauseAgentRun,
     recordAgentRunCheck,
     recordHumanReview,
+    resetDemoState,
     selectProject,
     startAgentRun,
     updateAgentRouting,
@@ -6958,6 +6999,7 @@ export function KavbanDashboard() {
               onRecordHumanReview={recordHumanReview}
               onRecordRunCheck={recordAgentRunCheck}
               onRepositoryChange={updateProjectRepository}
+              onResetDemoState={resetDemoState}
               onSelectProject={selectProject}
               onSelectTask={setSelectedTaskId}
               onStartAgentRun={startAgentRun}

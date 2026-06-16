@@ -103,6 +103,18 @@ const getTaskAgent = (task: Task) => kavbanAgents[task.agentId];
 const getTaskReviewer = (task: Task) => kavbanAgents[task.reviewerId];
 const getTaskActivity = (task: Task) =>
   task.events.map((event) => event.summary);
+const getDependencyItems = (task: Task, projectTasks: Task[]) =>
+  task.dependencies.map((dependency) => ({
+    key: dependency,
+    task: projectTasks.find(
+      (projectTask) =>
+        projectTask.id === dependency || projectTask.key === dependency
+    ),
+  }));
+const getBlockingDependencies = (task: Task, projectTasks: Task[]) =>
+  getDependencyItems(task, projectTasks).filter(
+    (item) => !item.task || item.task.status !== 'done'
+  );
 
 function StatusIcon({ task }: { task: Task }) {
   const column = workflowColumns.find((item) => item.id === task.status);
@@ -155,6 +167,15 @@ function PrPill({ value }: { value: string }) {
     <span className="inline-flex h-6 items-center gap-1.5 rounded-[5px] border border-[#2a2c31] bg-[#25272b] px-2 text-xs font-medium text-[#cfd2da]">
       <GitPullRequestIcon className="size-3.5 text-[#58b957]" weight="bold" />
       {value}
+    </span>
+  );
+}
+
+function BlockedPill({ count }: { count: number }) {
+  return (
+    <span className="inline-flex h-6 items-center gap-1.5 rounded-[5px] border border-[#553131] bg-[#25191b] px-2 text-xs font-medium text-[#f26d6d]">
+      <ShieldCheckIcon className="size-3.5" weight="bold" />
+      Blocked {count}
     </span>
   );
 }
@@ -1036,14 +1057,18 @@ function TaskCreatePanel({
 }
 
 function TaskCard({
+  projectTasks,
   task,
   selected,
   onSelect,
 }: {
+  projectTasks: Task[];
   task: Task;
   selected: boolean;
   onSelect: () => void;
 }) {
+  const blockingDependencies = getBlockingDependencies(task, projectTasks);
+
   return (
     <button
       type="button"
@@ -1078,6 +1103,9 @@ function TaskCard({
         {task.tags.slice(0, 2).map((tag) => (
           <TagPill key={tag.label} tag={tag} />
         ))}
+        {blockingDependencies.length > 0 && (
+          <BlockedPill count={blockingDependencies.length} />
+        )}
         {task.pr && <PrPill value={task.pr} />}
       </div>
     </button>
@@ -1140,6 +1168,7 @@ function TasksBoard({
                 {columnTasks.map((task) => (
                   <TaskCard
                     key={task.id}
+                    projectTasks={tasks}
                     task={task}
                     selected={task.id === selectedTaskId}
                     onSelect={() => onSelectTask(task.id)}
@@ -1166,34 +1195,41 @@ function TasksList({
   return (
     <div className="min-w-[980px] px-6 py-7">
       <div className="space-y-1">
-        {tasks.map((task) => (
-          <button
-            type="button"
-            key={task.id}
-            onClick={() => onSelectTask(task.id)}
-            className={cn(
-              'grid min-h-[46px] w-full grid-cols-[96px_minmax(280px,1fr)_minmax(400px,auto)] items-center gap-4 rounded-[6px] px-3 text-left text-sm transition-colors hover:bg-[#191b1f]',
-              selectedTaskId === task.id && 'bg-[#191b1f]'
-            )}
-          >
-            <span className="font-ibm-plex-mono text-[#717783]">
-              {task.key}
-            </span>
-            <span className="flex min-w-0 items-center gap-2.5">
-              <StatusIcon task={task} />
-              <span className="truncate font-medium text-[#d6d8df]">
-                {task.title}
+        {tasks.map((task) => {
+          const blockingDependencies = getBlockingDependencies(task, tasks);
+
+          return (
+            <button
+              type="button"
+              key={task.id}
+              onClick={() => onSelectTask(task.id)}
+              className={cn(
+                'grid min-h-[46px] w-full grid-cols-[96px_minmax(280px,1fr)_minmax(400px,auto)] items-center gap-4 rounded-[6px] px-3 text-left text-sm transition-colors hover:bg-[#191b1f]',
+                selectedTaskId === task.id && 'bg-[#191b1f]'
+              )}
+            >
+              <span className="font-ibm-plex-mono text-[#717783]">
+                {task.key}
               </span>
-            </span>
-            <span className="flex items-center justify-end gap-2">
-              {task.branch && <BranchPill value={task.branch} />}
-              {task.tags.slice(0, 2).map((tag) => (
-                <TagPill key={tag.label} tag={tag} />
-              ))}
-              <AgentAvatar agent={getTaskAgent(task)} />
-            </span>
-          </button>
-        ))}
+              <span className="flex min-w-0 items-center gap-2.5">
+                <StatusIcon task={task} />
+                <span className="truncate font-medium text-[#d6d8df]">
+                  {task.title}
+                </span>
+              </span>
+              <span className="flex items-center justify-end gap-2">
+                {task.branch && <BranchPill value={task.branch} />}
+                {blockingDependencies.length > 0 && (
+                  <BlockedPill count={blockingDependencies.length} />
+                )}
+                {task.tags.slice(0, 2).map((tag) => (
+                  <TagPill key={tag.label} tag={tag} />
+                ))}
+                <AgentAvatar agent={getTaskAgent(task)} />
+              </span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -1510,13 +1546,8 @@ function TaskDetailPanel({
 }) {
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const dependencyItems = task.dependencies.map((dependency) => ({
-    key: dependency,
-    task: projectTasks.find(
-      (projectTask) =>
-        projectTask.id === dependency || projectTask.key === dependency
-    ),
-  }));
+  const dependencyItems = getDependencyItems(task, projectTasks);
+  const blockingDependencies = getBlockingDependencies(task, projectTasks);
 
   useEffect(() => {
     setIsConfirmingDelete(false);
@@ -1594,6 +1625,30 @@ function TaskDetailPanel({
       </div>
 
       <div className="space-y-5 px-5 py-5">
+        {blockingDependencies.length > 0 && (
+          <div className="rounded-[7px] border border-[#553131] bg-[#211719] p-3">
+            <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#f26d6d]">
+              <ShieldCheckIcon className="size-4" weight="bold" />
+              Blocked by dependencies
+            </div>
+            <div className="space-y-2">
+              {blockingDependencies.map((item) => (
+                <div
+                  key={item.key}
+                  className="flex items-center gap-2 text-sm text-[#cfa0a0]"
+                >
+                  <span className="font-ibm-plex-mono text-xs">
+                    {item.task?.key ?? item.key}
+                  </span>
+                  <span className="min-w-0 truncate">
+                    {item.task?.title ?? 'Missing dependency'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="grid gap-3 text-sm">
           {[
             ['Status', task.state],

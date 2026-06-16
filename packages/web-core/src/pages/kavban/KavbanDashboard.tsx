@@ -1,6 +1,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ComponentType,
   type FormEvent,
@@ -15,6 +16,7 @@ import {
   CircleIcon,
   ClockIcon,
   CompassIcon,
+  CopyIcon,
   DotsThreeIcon,
   FileTextIcon,
   FunnelSimpleIcon,
@@ -88,6 +90,38 @@ import type {
 } from './model';
 
 type PhosphorIcon = ComponentType<IconProps>;
+
+async function copyTextToClipboard(text: string) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // Fall through to the textarea path for browsers that expose the API
+      // but deny clipboard writes in embedded/webview contexts.
+    }
+  }
+
+  const textArea = document.createElement('textarea');
+  textArea.value = text;
+  textArea.setAttribute('readonly', '');
+  textArea.style.position = 'fixed';
+  textArea.style.left = '-9999px';
+  document.body.appendChild(textArea);
+  textArea.select();
+
+  let copied = false;
+
+  try {
+    copied = document.execCommand('copy');
+  } catch {
+    copied = false;
+  }
+
+  document.body.removeChild(textArea);
+
+  return copied;
+}
 
 type AppSection = 'inbox' | 'workspace' | 'settings' | 'profile';
 type ProjectTab = 'home' | 'tasks' | 'settings';
@@ -760,9 +794,54 @@ function AgentRunCard({
   run: NonNullable<Task['agentRuns']>[number];
 }) {
   const [activePane, setActivePane] = useState<AgentRunPane>('log');
+  const [promptCopyStatus, setPromptCopyStatus] = useState<
+    'idle' | 'copied' | 'selected' | 'failed'
+  >('idle');
+  const promptRef = useRef<HTMLPreElement>(null);
   const agent = kavbanAgents[run.agentId];
   const checks = run.checks ?? [];
   const logs = run.logs ?? [];
+  const copyPromptLabel =
+    promptCopyStatus === 'copied'
+      ? 'Copied'
+      : promptCopyStatus === 'selected'
+        ? 'Selected'
+        : promptCopyStatus === 'failed'
+          ? 'Copy failed'
+          : 'Copy prompt';
+
+  useEffect(() => {
+    if (promptCopyStatus === 'idle') {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => setPromptCopyStatus('idle'), 1800);
+
+    return () => window.clearTimeout(timeout);
+  }, [promptCopyStatus]);
+
+  const copyPrompt = async () => {
+    const copied = await copyTextToClipboard(run.prompt);
+
+    if (copied) {
+      setPromptCopyStatus('copied');
+      return;
+    }
+
+    const promptElement = promptRef.current;
+
+    if (!promptElement) {
+      setPromptCopyStatus('failed');
+      return;
+    }
+
+    const range = document.createRange();
+    range.selectNodeContents(promptElement);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    setPromptCopyStatus('selected');
+  };
 
   return (
     <div className="rounded-[7px] border border-[#24262b] bg-[#17181b] p-3">
@@ -871,9 +950,29 @@ function AgentRunCard({
               </button>
             ))}
           </div>
-          <span className="font-ibm-plex-mono text-[11px] text-[#626874]">
-            {logs.length} lines
-          </span>
+          {activePane === 'prompt' ? (
+            <button
+              type="button"
+              onClick={copyPrompt}
+              className={cn(
+                'flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-[6px] border px-2 text-[11px] font-semibold transition-colors',
+                promptCopyStatus === 'copied'
+                  ? 'border-[#31553a] bg-[#172219] text-[#78d16d]'
+                  : promptCopyStatus === 'selected'
+                    ? 'border-[#5b4a22] bg-[#241f15] text-[#f2d14b]'
+                    : promptCopyStatus === 'failed'
+                      ? 'border-[#553131] bg-[#211719] text-[#f26d6d]'
+                      : 'border-[#2a2c31] bg-[#17181b] text-[#aeb3bd] hover:border-[#3a3d45] hover:text-[#dce0e8]'
+              )}
+            >
+              <CopyIcon className="size-3.5" weight="bold" />
+              {copyPromptLabel}
+            </button>
+          ) : (
+            <span className="font-ibm-plex-mono text-[11px] text-[#626874]">
+              {logs.length} lines
+            </span>
+          )}
         </div>
 
         {activePane === 'log' && (
@@ -918,7 +1017,10 @@ function AgentRunCard({
         )}
 
         {activePane === 'prompt' && (
-          <pre className="max-h-44 overflow-auto whitespace-pre-wrap p-3 font-ibm-plex-mono text-[11px] leading-5 text-[#8d939f]">
+          <pre
+            ref={promptRef}
+            className="max-h-44 overflow-auto whitespace-pre-wrap p-3 font-ibm-plex-mono text-[11px] leading-5 text-[#8d939f]"
+          >
             {run.prompt}
           </pre>
         )}

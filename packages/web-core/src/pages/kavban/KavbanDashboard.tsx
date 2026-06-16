@@ -123,6 +123,14 @@ async function copyTextToClipboard(text: string) {
   return copied;
 }
 
+function selectElementContents(element: HTMLElement) {
+  const range = document.createRange();
+  range.selectNodeContents(element);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+}
+
 type AppSection = 'inbox' | 'workspace' | 'settings' | 'profile';
 type ProjectTab = 'home' | 'tasks' | 'settings';
 type TaskView = 'board' | 'list';
@@ -368,6 +376,52 @@ const getNormalizedTaskPayload = (
         },
   },
 });
+const getTaskContextPackPayload = (
+  task: Task,
+  repository: Project['repository'],
+  contextFiles: Project['contextFiles'],
+  connectors: Record<ConnectorId, Connector>
+) => {
+  const contextFileByPath = new Map(
+    contextFiles.map((file) => [file.path, file])
+  );
+
+  return {
+    task: {
+      id: task.id,
+      key: task.key,
+      title: task.title,
+      status: task.status,
+      assigned_agent: task.agentId,
+      reviewer_agent: task.reviewerId,
+      working_branch: task.branch ?? null,
+      pull_request: task.pr ?? null,
+    },
+    repository: {
+      provider: repository.provider,
+      owner: repository.owner,
+      name: repository.name,
+      default_branch: repository.defaultBranch,
+      local_path: repository.localPath ?? null,
+    },
+    context_files: getTaskRunContextFiles(contextFiles, task).map((path) => {
+      const contextFile = contextFileByPath.get(path);
+
+      return {
+        path,
+        available: Boolean(contextFile),
+        injected: contextFile?.injected ?? false,
+        purpose: contextFile?.purpose ?? 'Missing context file',
+      };
+    }),
+    missing_context_files: getMissingTaskContextFiles(contextFiles, task),
+    connectors: getTaskRunConnectorIds(task).map((connectorId) => ({
+      id: connectorId,
+      name: connectors[connectorId].name,
+      connected: connectors[connectorId].connected,
+    })),
+  };
+};
 const getLatestTaskChangeRequest = (task: Task) => {
   const event = [...task.events]
     .reverse()
@@ -835,11 +889,7 @@ function AgentRunCard({
       return;
     }
 
-    const range = document.createRange();
-    range.selectNodeContents(promptElement);
-    const selection = window.getSelection();
-    selection?.removeAllRanges();
-    selection?.addRange(range);
+    selectElementContents(promptElement);
     setPromptCopyStatus('selected');
   };
 
@@ -3841,8 +3891,12 @@ function TaskDetailPanel({
   const [commentText, setCommentText] = useState('');
   const [activeDetailTab, setActiveDetailTab] =
     useState<TaskDetailTab>('overview');
+  const [contextCopyStatus, setContextCopyStatus] = useState<
+    'idle' | 'copied' | 'selected' | 'failed'
+  >('idle');
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const contextPackRef = useRef<HTMLPreElement>(null);
   const dependencyItems = getDependencyItems(task, projectTasks);
   const blockingDependencies = getBlockingDependencies(task, projectTasks);
   const missingRunConnectors = getMissingTaskRunConnectors(connectors, task);
@@ -3897,6 +3951,19 @@ function TaskDetailPanel({
     null,
     2
   );
+  const taskContextPackJson = JSON.stringify(
+    getTaskContextPackPayload(task, repository, contextFiles, connectors),
+    null,
+    2
+  );
+  const contextCopyLabel =
+    contextCopyStatus === 'copied'
+      ? 'Copied'
+      : contextCopyStatus === 'selected'
+        ? 'Selected'
+        : contextCopyStatus === 'failed'
+          ? 'Copy failed'
+          : 'Copy context';
   const canMergeTask =
     task.status !== 'done' &&
     task.approvalStatus === 'approved' &&
@@ -3904,6 +3971,36 @@ function TaskDetailPanel({
   const canOpenRollback =
     task.status === 'done' && Boolean(task.mergedAt) && !task.rollbackPr;
   const canRunAiReview = canRunTaskAiReview(task);
+
+  useEffect(() => {
+    if (contextCopyStatus === 'idle') {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => setContextCopyStatus('idle'), 1800);
+
+    return () => window.clearTimeout(timeout);
+  }, [contextCopyStatus]);
+
+  const copyTaskContextPack = async () => {
+    const copied = await copyTextToClipboard(taskContextPackJson);
+
+    if (copied) {
+      setContextCopyStatus('copied');
+      return;
+    }
+
+    const contextPackElement = contextPackRef.current;
+
+    if (!contextPackElement) {
+      setContextCopyStatus('failed');
+      return;
+    }
+
+    selectElementContents(contextPackElement);
+    setContextCopyStatus('selected');
+  };
+
   const readinessItems = [
     {
       detail:
@@ -4642,6 +4739,37 @@ function TaskDetailPanel({
                   </div>
                 ))}
               </div>
+            </div>
+
+            <div>
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold text-[#dce0e8]">
+                  Assembled context
+                </h3>
+                <button
+                  type="button"
+                  onClick={copyTaskContextPack}
+                  className={cn(
+                    'flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-[6px] border px-2.5 text-xs font-semibold transition-colors',
+                    contextCopyStatus === 'copied'
+                      ? 'border-[#31553a] bg-[#172219] text-[#78d16d]'
+                      : contextCopyStatus === 'selected'
+                        ? 'border-[#5b4a22] bg-[#241f15] text-[#f2d14b]'
+                        : contextCopyStatus === 'failed'
+                          ? 'border-[#553131] bg-[#211719] text-[#f26d6d]'
+                          : 'border-[#2a2c31] bg-[#202227] text-[#cfd2da] hover:border-[#3a3d46]'
+                  )}
+                >
+                  <CopyIcon className="size-3.5" weight="bold" />
+                  {contextCopyLabel}
+                </button>
+              </div>
+              <pre
+                ref={contextPackRef}
+                className="max-h-72 overflow-auto whitespace-pre-wrap rounded-[6px] border border-[#24262b] bg-[#101113] p-3 font-ibm-plex-mono text-[11px] leading-5 text-[#8d939f]"
+              >
+                {taskContextPackJson}
+              </pre>
             </div>
 
             {dependencyItems.length > 0 && (

@@ -1036,7 +1036,9 @@ export function useKavbanLocalStore() {
 
       const updatedAt = nowIso();
       const approved = input.status === 'approved';
-      const nextStatus: KavbanTaskStatus = approved ? 'done' : 'progress';
+      const nextStatus: KavbanTaskStatus = approved
+        ? 'human-review'
+        : 'progress';
       const note =
         input.note?.trim() ||
         (approved
@@ -1057,7 +1059,9 @@ export function useKavbanLocalStore() {
                     ? {
                         ...task,
                         status: nextStatus,
-                        state: taskStateByStatus[nextStatus],
+                        state: approved
+                          ? 'Approved'
+                          : taskStateByStatus[nextStatus],
                         approvalStatus: input.status,
                         reviewStatus: approved ? 'passed' : 'changes-requested',
                         events: [
@@ -1067,6 +1071,59 @@ export function useKavbanLocalStore() {
                             kind: eventKind,
                             actor: 'human',
                             summary: note,
+                            createdAt: updatedAt,
+                          },
+                        ],
+                      }
+                    : task
+                ),
+              }
+            : project
+        ),
+        updatedAt,
+      }));
+
+      return true;
+    },
+    [activeProject.tasks]
+  );
+
+  const mergeTaskPullRequest = useCallback(
+    (taskId: string) => {
+      const taskToMerge = activeProject.tasks.find(
+        (task) => task.id === taskId
+      );
+
+      if (
+        !taskToMerge ||
+        !taskToMerge.pr ||
+        taskToMerge.approvalStatus !== 'approved'
+      ) {
+        return false;
+      }
+
+      const updatedAt = nowIso();
+
+      setState((current) => ({
+        ...current,
+        projects: current.projects.map((project) =>
+          project.id === current.activeProjectId
+            ? {
+                ...project,
+                tasks: project.tasks.map((task) =>
+                  task.id === taskId
+                    ? {
+                        ...task,
+                        status: 'done',
+                        state: taskStateByStatus.done,
+                        mergedAt: updatedAt,
+                        events: [
+                          ...task.events,
+                          {
+                            id: `evt-${taskId}-merge-${Date.now().toString(36)}`,
+                            kind: 'merge-completed',
+                            actor: 'github',
+                            summary: `PR ${task.pr} merged into ${project.repository.defaultBranch}.`,
                             createdAt: updatedAt,
                           },
                         ],
@@ -1271,6 +1328,7 @@ export function useKavbanLocalStore() {
     deleteContextFile,
     deleteTask,
     inboxItems: state.inboxItems,
+    mergeTaskPullRequest,
     moveTask,
     profile: state.profile,
     project: activeProjectWithDefaults,

@@ -36,7 +36,8 @@ export type KavbanTaskEventKind =
   | 'human-approved'
   | 'changes-requested'
   | 'task-commented'
-  | 'pr-opened';
+  | 'pr-opened'
+  | 'merge-completed';
 
 export type KavbanRepository = {
   provider: 'github';
@@ -161,6 +162,7 @@ export type KavbanTask = {
   reviewReports?: KavbanReviewReport[];
   reviewStatus?: KavbanReviewStatus;
   approvalStatus?: KavbanApprovalStatus;
+  mergedAt?: string;
   comments?: KavbanTaskComment[];
   events: KavbanTaskEvent[];
 };

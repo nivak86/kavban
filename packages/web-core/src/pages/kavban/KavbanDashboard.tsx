@@ -108,7 +108,6 @@ const taskAdvanceActions: Partial<
   ready: { label: 'Start agent', status: 'progress' },
   progress: { label: 'Send to AI review', status: 'ai-review' },
   'ai-review': { label: 'Request human review', status: 'human-review' },
-  'human-review': { label: 'Mark done', status: 'done' },
 };
 const taskFormFieldClass =
   'w-full rounded-[6px] border border-[#2a2c31] bg-[#111214] px-3 text-sm text-[#dce0e8] outline-none transition-colors placeholder:text-[#626874] focus:border-[#444956]';
@@ -1974,6 +1973,7 @@ function TaskDetailPanel({
   onAddTaskComment,
   onCreateAiReview,
   onDeleteTask,
+  onMergeTask,
   onMoveTask,
   onOpenTaskPullRequest,
   onRecordHumanReview,
@@ -1990,6 +1990,7 @@ function TaskDetailPanel({
   ) => boolean;
   onCreateAiReview: (taskId: string) => string | null;
   onDeleteTask: (taskId: string) => boolean;
+  onMergeTask: (taskId: string) => boolean;
   onMoveTask: (taskId: string, status: TaskStatus) => boolean;
   onOpenTaskPullRequest: (taskId: string) => string | null;
   onRecordHumanReview: (
@@ -2032,6 +2033,8 @@ function TaskDetailPanel({
     hasUnansweredChangeRequest &&
     task.status !== 'done' &&
     task.status !== 'ready';
+  const canMergeTask =
+    task.status !== 'done' && task.approvalStatus === 'approved';
   const needsFreshAiReview =
     !latestReviewReport ||
     Boolean(
@@ -2206,36 +2209,54 @@ function TaskDetailPanel({
           </button>
         )}
 
-        {task.status === 'human-review' && (
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() =>
-                onRecordHumanReview(task.id, {
-                  status: 'approved',
-                  note: 'Human approved the task for merge.',
-                })
-              }
-              className="flex h-9 items-center justify-center gap-2 rounded-[6px] border border-[#31553a] bg-[#172219] px-3 text-xs font-semibold text-[#78d16d] transition-colors hover:border-[#427049]"
-            >
-              <CheckCircleIcon className="size-4" weight="fill" />
-              Approve
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                onRecordHumanReview(task.id, {
-                  status: 'changes-requested',
-                  note: 'Human requested changes from the assigned agent.',
-                })
-              }
-              className="flex h-9 items-center justify-center gap-2 rounded-[6px] border border-[#553131] bg-[#211719] px-3 text-xs font-semibold text-[#f26d6d] transition-colors hover:border-[#6b3b3b]"
-            >
-              <XIcon className="size-4" weight="bold" />
-              Request changes
-            </button>
-          </div>
+        {canMergeTask && (
+          <button
+            type="button"
+            disabled={!task.pr}
+            onClick={() => onMergeTask(task.id)}
+            className={cn(
+              'flex h-9 w-full items-center justify-center gap-2 rounded-[6px] border px-3 text-xs font-semibold transition-colors',
+              task.pr
+                ? 'border-[#31553a] bg-[#172219] text-[#78d16d] hover:border-[#427049]'
+                : 'cursor-not-allowed border-[#553131] bg-[#211719] text-[#f26d6d]'
+            )}
+          >
+            <GitPullRequestIcon className="size-4" weight="bold" />
+            {task.pr ? 'Merge PR' : 'Open PR before merge'}
+          </button>
         )}
+
+        {task.status === 'human-review' &&
+          task.approvalStatus !== 'approved' && (
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  onRecordHumanReview(task.id, {
+                    status: 'approved',
+                    note: 'Human approved the task for merge.',
+                  })
+                }
+                className="flex h-9 items-center justify-center gap-2 rounded-[6px] border border-[#31553a] bg-[#172219] px-3 text-xs font-semibold text-[#78d16d] transition-colors hover:border-[#427049]"
+              >
+                <CheckCircleIcon className="size-4" weight="fill" />
+                Approve
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  onRecordHumanReview(task.id, {
+                    status: 'changes-requested',
+                    note: 'Human requested changes from the assigned agent.',
+                  })
+                }
+                className="flex h-9 items-center justify-center gap-2 rounded-[6px] border border-[#553131] bg-[#211719] px-3 text-xs font-semibold text-[#f26d6d] transition-colors hover:border-[#6b3b3b]"
+              >
+                <XIcon className="size-4" weight="bold" />
+                Request changes
+              </button>
+            </div>
+          )}
 
         {blockingDependencies.length > 0 && (
           <div className="rounded-[7px] border border-[#553131] bg-[#211719] p-3">
@@ -2272,6 +2293,17 @@ function TaskDetailPanel({
             ['Tests', task.testStatus ?? 'Not run'],
             ['Review', task.reviewStatus ?? 'Not reviewed'],
             ['Approval', task.approvalStatus ?? 'Not requested'],
+            [
+              'Merged',
+              task.mergedAt
+                ? new Date(task.mergedAt).toLocaleString([], {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })
+                : 'Not merged',
+            ],
             [
               'Human review',
               task.requiresHumanReview === false ? 'Optional' : 'Required',
@@ -2464,6 +2496,7 @@ function WorkspaceTasks({
   onAddTaskComment,
   onCreateTask,
   onDeleteTask,
+  onMergeTask,
   onMoveTask,
   onOpenTaskPullRequest,
   onRecordHumanReview,
@@ -2486,6 +2519,7 @@ function WorkspaceTasks({
   ) => boolean;
   onCreateTask: (input: KavbanCreateTaskInput) => string | null;
   onDeleteTask: (taskId: string) => boolean;
+  onMergeTask: (taskId: string) => boolean;
   onMoveTask: (taskId: string, status: TaskStatus) => boolean;
   onOpenTaskPullRequest: (taskId: string) => string | null;
   onRecordHumanReview: (
@@ -2635,6 +2669,7 @@ function WorkspaceTasks({
           onAddTaskComment={onAddTaskComment}
           onCreateAiReview={onCreateAiReview}
           onDeleteTask={handleDeleteTask}
+          onMergeTask={onMergeTask}
           onMoveTask={onMoveTask}
           onOpenTaskPullRequest={onOpenTaskPullRequest}
           onRecordHumanReview={onRecordHumanReview}
@@ -3343,6 +3378,7 @@ function WorkspaceView({
   onCreateTask,
   onDeleteContextFile,
   onDeleteTask,
+  onMergeTask,
   onMoveTask,
   onProjectTabChange,
   onOpenTaskPullRequest,
@@ -3376,6 +3412,7 @@ function WorkspaceView({
   onCreateTask: (input: KavbanCreateTaskInput) => string | null;
   onDeleteContextFile: (path: string) => boolean;
   onDeleteTask: (taskId: string) => boolean;
+  onMergeTask: (taskId: string) => boolean;
   onMoveTask: (taskId: string, status: TaskStatus) => boolean;
   onProjectTabChange: (tab: ProjectTab) => void;
   onOpenTaskPullRequest: (taskId: string) => string | null;
@@ -3437,6 +3474,7 @@ function WorkspaceView({
             onCreateAiReview={onCreateAiReview}
             onCreateTask={onCreateTask}
             onDeleteTask={onDeleteTask}
+            onMergeTask={onMergeTask}
             onMoveTask={onMoveTask}
             onOpenTaskPullRequest={onOpenTaskPullRequest}
             onRecordHumanReview={onRecordHumanReview}
@@ -3573,6 +3611,7 @@ export function KavbanDashboard() {
     deleteContextFile,
     deleteTask,
     inboxItems,
+    mergeTaskPullRequest,
     moveTask,
     openTaskPullRequest,
     profile,
@@ -3655,6 +3694,7 @@ export function KavbanDashboard() {
               onCreateTask={createTask}
               onDeleteContextFile={deleteContextFile}
               onDeleteTask={deleteTask}
+              onMergeTask={mergeTaskPullRequest}
               onMoveTask={moveTask}
               onOpenTaskPullRequest={openTaskPullRequest}
               onProjectTabChange={setProjectTab}

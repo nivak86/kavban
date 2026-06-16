@@ -2988,6 +2988,7 @@ function TaskDetailPanel({
   contextFiles,
   onAddTaskComment,
   onCompleteDependency,
+  onConnectMissingConnectors,
   onCreateAiReview,
   onDeleteTask,
   onMergeTask,
@@ -3011,6 +3012,7 @@ function TaskDetailPanel({
     input: KavbanAddTaskCommentInput
   ) => boolean;
   onCompleteDependency: (taskId: string, dependencyId: string) => boolean;
+  onConnectMissingConnectors: (connectorIds: ConnectorId[]) => void;
   onCreateAiReview: (
     taskId: string,
     input?: KavbanCreateAiReviewInput
@@ -3333,9 +3335,23 @@ function TaskDetailPanel({
 
         {missingRunConnectors.length > 0 && (
           <div className="rounded-[7px] border border-[#553131] bg-[#211719] p-3">
-            <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#f26d6d]">
-              <PlugsConnectedIcon className="size-4" weight="bold" />
-              Missing connectors
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-sm font-semibold text-[#f26d6d]">
+                <PlugsConnectedIcon className="size-4" weight="bold" />
+                Missing connectors
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  onConnectMissingConnectors(
+                    missingRunConnectors.map((connector) => connector.id)
+                  )
+                }
+                className="inline-flex h-7 items-center gap-1.5 rounded-[5px] border border-[#31553a] bg-[#172219] px-2 text-[11px] font-semibold text-[#78d16d] transition-colors hover:border-[#427049]"
+              >
+                <PlugsConnectedIcon className="size-3.5" weight="bold" />
+                Connect required
+              </button>
             </div>
             <div className="flex flex-wrap gap-2">
               {missingRunConnectors.map((connector) => {
@@ -3378,11 +3394,22 @@ function TaskDetailPanel({
         {task.status === 'ready' && (
           <button
             type="button"
-            disabled={isRunAgentBlocked}
-            onClick={() => onStartAgentRun(task.id)}
+            disabled={
+              isRunAgentBlocked && missingRunConnectors.length === 0
+            }
+            onClick={() => {
+              if (missingRunConnectors.length > 0) {
+                onConnectMissingConnectors(
+                  missingRunConnectors.map((connector) => connector.id)
+                );
+                return;
+              }
+
+              onStartAgentRun(task.id);
+            }}
             className={cn(
               'flex h-9 w-full items-center justify-center gap-2 rounded-[6px] border px-3 text-xs font-semibold transition-colors',
-              isRunAgentBlocked
+              isRunAgentBlocked && missingRunConnectors.length === 0
                 ? 'cursor-not-allowed border-[#553131] bg-[#211719] text-[#f26d6d]'
                 : 'border-[#31553a] bg-[#172219] text-[#78d16d] hover:border-[#427049]'
             )}
@@ -4113,6 +4140,7 @@ function WorkspaceTasks({
   onCreateAiReview,
   onAddTaskComment,
   onCompleteDependency,
+  onConnectMissingConnectors,
   onCreateTask,
   onDeleteTask,
   onImportCodexTask,
@@ -4146,6 +4174,7 @@ function WorkspaceTasks({
     input: KavbanAddTaskCommentInput
   ) => boolean;
   onCompleteDependency: (taskId: string, dependencyId: string) => boolean;
+  onConnectMissingConnectors: (connectorIds: ConnectorId[]) => void;
   onCreateTask: (input: KavbanCreateTaskInput) => string | null;
   onDeleteTask: (taskId: string) => boolean;
   onImportCodexTask: (
@@ -4596,6 +4625,7 @@ function WorkspaceTasks({
           contextFiles={contextFiles}
           onAddTaskComment={onAddTaskComment}
           onCompleteDependency={onCompleteDependency}
+          onConnectMissingConnectors={onConnectMissingConnectors}
           onCreateAiReview={onCreateAiReview}
           onDeleteTask={handleDeleteTask}
           onMergeTask={onMergeTask}
@@ -5578,6 +5608,7 @@ function WorkspaceView({
   onAgentRoutingChange,
   onBriefChange,
   onCompleteDependency,
+  onConnectMissingConnectors,
   onCreateContextFile,
   onCreateAiReview,
   onCreateProject,
@@ -5616,6 +5647,7 @@ function WorkspaceView({
   onAgentRoutingChange: (input: KavbanAgentRoutingInput) => boolean;
   onBriefChange: (value: string) => void;
   onCompleteDependency: (taskId: string, dependencyId: string) => boolean;
+  onConnectMissingConnectors: (connectorIds: ConnectorId[]) => void;
   onCreateContextFile: (input: KavbanContextFileInput) => boolean;
   onCreateAiReview: (
     taskId: string,
@@ -5665,6 +5697,7 @@ function WorkspaceView({
         contextFiles={project.contextFiles}
         onAddTaskComment={onAddTaskComment}
         onCompleteDependency={onCompleteDependency}
+        onConnectMissingConnectors={onConnectMissingConnectors}
         onCreateAiReview={onCreateAiReview}
         onCreateTask={onCreateTask}
         onDeleteTask={onDeleteTask}
@@ -6112,6 +6145,18 @@ export function KavbanDashboard() {
           : 'Ready',
     }));
   };
+  const connectMissingConnectors = (ids: ConnectorId[]) => {
+    ids.forEach((id) => {
+      updateConnector(id, (connector) => ({
+        ...connector,
+        connected: true,
+        status:
+          id === 'github'
+            ? `${project.repository.owner}/${project.repository.name}`
+            : 'Ready',
+      }));
+    });
+  };
   const handleSectionChange = (section: AppSection) => {
     setActiveSection(section);
 
@@ -6152,6 +6197,7 @@ export function KavbanDashboard() {
               onAgentRoutingChange={updateAgentRouting}
               onBriefChange={updateProjectBrief}
               onCompleteDependency={completeDependencyForTask}
+              onConnectMissingConnectors={connectMissingConnectors}
               onCreateAiReview={createAiReview}
               onCreateContextFile={createContextFile}
               onCreateProject={createProject}

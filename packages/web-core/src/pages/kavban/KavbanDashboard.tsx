@@ -359,6 +359,21 @@ const getLatestTaskChangeRequest = (task: Task) => {
 
   return null;
 };
+const canRunTaskAiReview = (task: Task) => {
+  const latestReviewReport = task.reviewReports?.[0];
+  const latestRunUpdatedAt = task.agentRuns?.[0]?.updatedAt;
+  const needsFreshAiReview =
+    !latestReviewReport ||
+    Boolean(
+      latestRunUpdatedAt &&
+        new Date(latestRunUpdatedAt).getTime() >
+          new Date(latestReviewReport.createdAt).getTime()
+    );
+
+  return (
+    task.testStatus === 'passed' && task.status !== 'done' && needsFreshAiReview
+  );
+};
 const getDependencyItems = (task: Task, projectTasks: Task[]) =>
   task.dependencies.map((dependency) => ({
     key: dependency,
@@ -962,7 +977,9 @@ function WaitingPill({ summary }: { summary: TaskBlockerSummary }) {
 
 function QueueMonitor({
   activeRunTasks,
+  aiReviewTasks,
   onDismissSummary,
+  onCreateAiReview,
   onRecordActiveRunCheck,
   onSelectTask,
   queueSummary,
@@ -971,7 +988,12 @@ function QueueMonitor({
   waitingCount,
 }: {
   activeRunTasks: Task[];
+  aiReviewTasks: Task[];
   onDismissSummary: () => void;
+  onCreateAiReview: (
+    taskId: string,
+    input?: KavbanCreateAiReviewInput
+  ) => string | null;
   onRecordActiveRunCheck: (
     taskId: string,
     runId: string,
@@ -984,6 +1006,7 @@ function QueueMonitor({
   waitingCount: number;
 }) {
   const hasActiveRuns = activeRunTasks.length > 0;
+  const hasAiReviewTasks = aiReviewTasks.length > 0;
   const hasReadyItems = readyItems.length > 0;
   const stats = [
     {
@@ -1005,6 +1028,11 @@ function QueueMonitor({
       label: 'Active runs',
       value: activeRunTasks.length,
       tone: activeRunTasks.length > 0 ? 'text-[#8bbcff]' : 'text-[#777d88]',
+    },
+    {
+      label: 'AI review',
+      value: aiReviewTasks.length,
+      tone: aiReviewTasks.length > 0 ? 'text-[#d6cdfd]' : 'text-[#777d88]',
     },
   ];
 
@@ -1030,7 +1058,7 @@ function QueueMonitor({
               </button>
             )}
           </div>
-          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
             {stats.map((stat) => (
               <div
                 key={stat.label}
@@ -1155,7 +1183,66 @@ function QueueMonitor({
             </div>
           )}
 
-          {!hasReadyItems && !hasActiveRuns && (
+          {hasAiReviewTasks && (
+            <div
+              className={cn(
+                (hasReadyItems || hasActiveRuns) &&
+                  'mt-2 border-t border-[#24262b] pt-2'
+              )}
+            >
+              <div className="mb-1 px-2 text-[11px] font-semibold text-[#777d88]">
+                AI review
+              </div>
+              <div className="space-y-1">
+                {aiReviewTasks.slice(0, 4).map((task) => (
+                  <div
+                    key={task.id}
+                    className="grid min-h-10 w-full grid-cols-[72px_minmax(0,1fr)_auto_auto_auto_auto] items-center gap-2 rounded-[6px] px-2 text-xs transition-colors hover:bg-[#202227]"
+                  >
+                    <span className="font-ibm-plex-mono text-[#777d88]">
+                      {task.key}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => onSelectTask(task.id)}
+                      className="min-w-0 truncate text-left font-semibold text-[#cfd2da]"
+                    >
+                      {task.title}
+                    </button>
+                    <span className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-[5px] border border-[#3b334f] bg-[#1f1b2a] px-2 text-xs font-medium text-[#d6cdfd]">
+                      <ShieldCheckIcon className="size-3.5" weight="bold" />
+                      {getTaskReviewer(task).name}
+                    </span>
+                    {aiReviewOutcomeOptions.map((option) => {
+                      const Icon = option.icon;
+
+                      return (
+                        <button
+                          key={option.status}
+                          type="button"
+                          aria-label={`Mark ${task.key} AI review ${option.label}`}
+                          onClick={() =>
+                            onCreateAiReview(task.id, {
+                              note: option.note,
+                              status: option.status,
+                            })
+                          }
+                          className={cn(
+                            'flex size-6 shrink-0 items-center justify-center rounded-[5px] border transition-colors',
+                            option.className
+                          )}
+                        >
+                          <Icon className="size-3.5" weight="bold" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!hasReadyItems && !hasActiveRuns && !hasAiReviewTasks && (
             <div className="flex min-h-10 items-center gap-2 rounded-[6px] px-2 text-sm text-[#777d88]">
               <ClockIcon className="size-4" weight="bold" />
               No ready tasks queued
@@ -3154,8 +3241,6 @@ function TaskDetailPanel({
   const reviewReports = task.reviewReports ?? [];
   const fileChanges = getTaskFileChanges(task);
   const pullRequestUrl = getTaskPullRequestUrl(repository, task.pr);
-  const latestReviewReport = reviewReports[0];
-  const latestRunUpdatedAt = agentRuns[0]?.updatedAt;
   const latestChangeRequest = getLatestTaskChangeRequest(task);
   const latestRunStartedAt = agentRuns[0]?.createdAt;
   const hasUnansweredChangeRequest = Boolean(
@@ -3185,17 +3270,7 @@ function TaskDetailPanel({
     Boolean(activeMergePullRequest);
   const canOpenRollback =
     task.status === 'done' && Boolean(task.mergedAt) && !task.rollbackPr;
-  const needsFreshAiReview =
-    !latestReviewReport ||
-    Boolean(
-      latestRunUpdatedAt &&
-        new Date(latestRunUpdatedAt).getTime() >
-          new Date(latestReviewReport.createdAt).getTime()
-    );
-  const canRunAiReview =
-    task.testStatus === 'passed' &&
-    task.status !== 'done' &&
-    needsFreshAiReview;
+  const canRunAiReview = canRunTaskAiReview(task);
   const readinessItems = [
     {
       detail:
@@ -4357,6 +4432,13 @@ function WorkspaceTasks({
     () => tasks.filter((task) => Boolean(task.lockedBy)),
     [tasks]
   );
+  const aiReviewTasks = useMemo(
+    () =>
+      tasks.filter(
+        (task) => task.status === 'ai-review' && canRunTaskAiReview(task)
+      ),
+    [tasks]
+  );
 
   const openCreateTask = (status: TaskStatus = 'backlog') => {
     setTaskCreateStatus(status);
@@ -4541,7 +4623,9 @@ function WorkspaceTasks({
         </header>
         <QueueMonitor
           activeRunTasks={activeRunTasks}
+          aiReviewTasks={aiReviewTasks}
           onDismissSummary={() => setQueueSummary('')}
+          onCreateAiReview={onCreateAiReview}
           onRecordActiveRunCheck={(taskId, runId, status) =>
             onRecordRunCheck(taskId, runId, {
               command: 'pnpm test',

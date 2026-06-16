@@ -156,6 +156,7 @@ const projectTasks: KavbanTask[] = [
     reviewerId: 'reviewer',
     branch: 'kav/kav-000123-run-agent',
     pr: '#55234',
+    testStatus: 'passed',
     tags: [
       { label: 'Orchestrator', color: '#78d16d' },
       { label: 'Codex', color: '#f2d14b' },
@@ -166,13 +167,22 @@ const projectTasks: KavbanTask[] = [
       {
         id: 'run-kav-000123-seed',
         agentId: 'codex',
-        status: 'running',
+        status: 'completed',
         branch: 'kav/kav-000123-run-agent',
         contextFiles: ['agent-rules.md', 'review-checklist.md'],
         prompt:
           'Project: Kavban\nRepository: nivak86/kavban\nTask: KAV-123 Run agent with selected context files\nBranch: kav/kav-000123-run-agent\nAssigned agent: Codex\nPriority: High\n\nInstructions:\nBuild a manual run surface that locks a task, creates a branch, assembles context, and starts the selected agent.\n\nContext files:\n- agent-rules.md\n- review-checklist.md',
+        checks: [
+          {
+            id: 'chk-kav-000123-seed',
+            command: 'pnpm test',
+            status: 'passed',
+            output: 'pnpm test passed.',
+            createdAt: '2026-06-16T09:24:00.000Z',
+          },
+        ],
         createdAt: '2026-06-16T09:20:00.000Z',
-        updatedAt: '2026-06-16T09:20:00.000Z',
+        updatedAt: '2026-06-16T09:24:00.000Z',
       },
     ],
     events: [
@@ -189,6 +199,13 @@ const projectTasks: KavbanTask[] = [
         actor: 'system',
         summary: 'Context pack assembled with 6 files.',
         createdAt: '2026-06-16T09:21:00.000Z',
+      },
+      {
+        id: 'evt-kav-123-tests',
+        kind: 'tests-passed',
+        actor: 'system',
+        summary: 'pnpm test passed.',
+        createdAt: '2026-06-16T09:24:00.000Z',
       },
     ],
   },

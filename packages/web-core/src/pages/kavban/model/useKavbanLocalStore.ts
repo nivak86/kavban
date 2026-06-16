@@ -9,11 +9,13 @@ import { kavbanAgents, kavbanDefaultAgentRouting, kavbanProject } from './seed';
 import type {
   KavbanAgentId,
   KavbanAgentRouting,
+  KavbanCheckStatus,
   KavbanConnector,
   KavbanConnectorId,
   KavbanContextFile,
   KavbanProject,
   KavbanTask,
+  KavbanTaskEventKind,
   KavbanTaskPriority,
   KavbanTaskStatus,
 } from './types';
@@ -33,6 +35,12 @@ export type KavbanCreateTaskInput = {
 };
 
 export type KavbanUpdateTaskInput = KavbanCreateTaskInput;
+
+export type KavbanRecordRunCheckInput = {
+  status: KavbanCheckStatus;
+  command?: string;
+  output?: string;
+};
 
 export type KavbanContextFileInput = {
   path: string;
@@ -715,6 +723,7 @@ export function useKavbanLocalStore() {
           branch,
           runContextFiles
         ),
+        checks: [],
         createdAt: updatedAt,
         updatedAt,
       };
@@ -762,6 +771,82 @@ export function useKavbanLocalStore() {
       return runId;
     },
     [activeProject]
+  );
+
+  const recordAgentRunCheck = useCallback(
+    (taskId: string, runId: string, input: KavbanRecordRunCheckInput) => {
+      const taskToUpdate = activeProject.tasks.find(
+        (task) => task.id === taskId
+      );
+      const runToUpdate = taskToUpdate?.agentRuns?.find(
+        (run) => run.id === runId
+      );
+
+      if (!taskToUpdate || !runToUpdate) {
+        return false;
+      }
+
+      const updatedAt = nowIso();
+      const command = input.command?.trim() || 'pnpm test';
+      const output =
+        input.output?.trim() || `${command} ${input.status} from Kavban.`;
+      const checkId = `chk-${runId}-${Date.now().toString(36)}`;
+      const eventKind: KavbanTaskEventKind =
+        input.status === 'passed' ? 'tests-passed' : 'tests-failed';
+      const runStatus = input.status === 'passed' ? 'completed' : 'failed';
+
+      setState((current) => ({
+        ...current,
+        projects: current.projects.map((project) =>
+          project.id === current.activeProjectId
+            ? {
+                ...project,
+                tasks: project.tasks.map((task) =>
+                  task.id === taskId
+                    ? {
+                        ...task,
+                        testStatus: input.status,
+                        agentRuns: task.agentRuns?.map((run) =>
+                          run.id === runId
+                            ? {
+                                ...run,
+                                status: runStatus,
+                                checks: [
+                                  {
+                                    id: checkId,
+                                    command,
+                                    status: input.status,
+                                    output,
+                                    createdAt: updatedAt,
+                                  },
+                                  ...(run.checks ?? []),
+                                ],
+                                updatedAt,
+                              }
+                            : run
+                        ),
+                        events: [
+                          ...task.events,
+                          {
+                            id: `evt-${checkId}`,
+                            kind: eventKind,
+                            actor: 'system',
+                            summary: `${command} ${input.status}.`,
+                            createdAt: updatedAt,
+                          },
+                        ],
+                      }
+                    : task
+                ),
+              }
+            : project
+        ),
+        updatedAt,
+      }));
+
+      return true;
+    },
+    [activeProject.tasks]
   );
 
   const moveTask = useCallback(
@@ -847,6 +932,7 @@ export function useKavbanLocalStore() {
     profile: state.profile,
     project: activeProjectWithDefaults,
     projects: state.projects,
+    recordAgentRunCheck,
     selectProject,
     startAgentRun,
     state,

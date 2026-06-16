@@ -28,6 +28,8 @@ export type KavbanTaskEventKind =
   | 'task-status-changed'
   | 'agent-started'
   | 'context-attached'
+  | 'tests-passed'
+  | 'tests-failed'
   | 'review-started'
   | 'approval-needed'
   | 'pr-opened';
@@ -75,7 +77,21 @@ export type KavbanTaskEvent = {
   createdAt: string;
 };
 
-export type KavbanAgentRunStatus = 'queued' | 'running' | 'completed';
+export type KavbanAgentRunStatus =
+  | 'queued'
+  | 'running'
+  | 'completed'
+  | 'failed';
+
+export type KavbanCheckStatus = 'passed' | 'failed';
+
+export type KavbanRunCheck = {
+  id: string;
+  command: string;
+  status: KavbanCheckStatus;
+  output: string;
+  createdAt: string;
+};
 
 export type KavbanAgentRun = {
   id: string;
@@ -84,6 +100,7 @@ export type KavbanAgentRun = {
   branch: string;
   contextFiles: string[];
   prompt: string;
+  checks?: KavbanRunCheck[];
   createdAt: string;
   updatedAt: string;
 };
@@ -105,6 +122,7 @@ export type KavbanTask = {
   dependencies: string[];
   contextFiles: string[];
   agentRuns?: KavbanAgentRun[];
+  testStatus?: KavbanCheckStatus | 'not-run';
   events: KavbanTaskEvent[];
 };
 

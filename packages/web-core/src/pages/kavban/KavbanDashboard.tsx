@@ -57,6 +57,7 @@ import type {
   KavbanInboxItem as InboxItem,
   KavbanProfile as Profile,
   KavbanProject as Project,
+  KavbanRecordRunCheckInput,
   KavbanRepositoryInput,
   KavbanTag as Tag,
   KavbanTask as Task,
@@ -193,12 +194,41 @@ function HumanReviewPill() {
   );
 }
 
+function TestStatusPill({ status }: { status: Task['testStatus'] }) {
+  if (!status || status === 'not-run') {
+    return null;
+  }
+
+  const passed = status === 'passed';
+
+  return (
+    <span
+      className={cn(
+        'inline-flex h-6 items-center gap-1.5 rounded-[5px] border px-2 text-xs font-medium',
+        passed
+          ? 'border-[#31553a] bg-[#172219] text-[#78d16d]'
+          : 'border-[#553131] bg-[#25191b] text-[#f26d6d]'
+      )}
+    >
+      {passed ? (
+        <CheckCircleIcon className="size-3.5" weight="fill" />
+      ) : (
+        <XIcon className="size-3.5" weight="bold" />
+      )}
+      Tests {status}
+    </span>
+  );
+}
+
 function AgentRunCard({
+  onRecordCheck,
   run,
 }: {
+  onRecordCheck: (runId: string, input: KavbanRecordRunCheckInput) => boolean;
   run: NonNullable<Task['agentRuns']>[number];
 }) {
   const agent = kavbanAgents[run.agentId];
+  const checks = run.checks ?? [];
 
   return (
     <div className="rounded-[7px] border border-[#24262b] bg-[#17181b] p-3">
@@ -232,6 +262,61 @@ function AgentRunCard({
         <FileTextIcon className="size-3.5" weight="bold" />
         {run.contextFiles.length} context files attached
       </div>
+      <div className="mb-3 grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={() =>
+            onRecordCheck(run.id, {
+              status: 'passed',
+              command: 'pnpm test',
+              output: 'pnpm test passed from the Kavban run panel.',
+            })
+          }
+          className="flex h-8 items-center justify-center gap-1.5 rounded-[6px] border border-[#31553a] bg-[#172219] px-2 text-[11px] font-semibold text-[#78d16d] transition-colors hover:border-[#427049]"
+        >
+          <CheckCircleIcon className="size-3.5" weight="fill" />
+          Pass checks
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            onRecordCheck(run.id, {
+              status: 'failed',
+              command: 'pnpm test',
+              output: 'pnpm test failed from the Kavban run panel.',
+            })
+          }
+          className="flex h-8 items-center justify-center gap-1.5 rounded-[6px] border border-[#553131] bg-[#211719] px-2 text-[11px] font-semibold text-[#f26d6d] transition-colors hover:border-[#6b3b3b]"
+        >
+          <XIcon className="size-3.5" weight="bold" />
+          Fail checks
+        </button>
+      </div>
+      {checks.length > 0 && (
+        <div className="mb-3 space-y-2">
+          {checks.map((check) => (
+            <div
+              key={check.id}
+              className="rounded-[6px] border border-[#24262b] bg-[#111214] px-2.5 py-2 text-xs text-[#aeb3bd]"
+            >
+              <div className="mb-1 flex items-center justify-between gap-3">
+                <span className="font-ibm-plex-mono">{check.command}</span>
+                <span
+                  className={cn(
+                    'font-ibm-plex-mono uppercase',
+                    check.status === 'passed'
+                      ? 'text-[#78d16d]'
+                      : 'text-[#f26d6d]'
+                  )}
+                >
+                  {check.status}
+                </span>
+              </div>
+              <p className="truncate text-[#777d88]">{check.output}</p>
+            </div>
+          ))}
+        </div>
+      )}
       <pre className="max-h-28 overflow-hidden whitespace-pre-wrap rounded-[6px] border border-[#24262b] bg-[#101113] p-3 font-ibm-plex-mono text-[11px] leading-5 text-[#8d939f]">
         {run.prompt}
       </pre>
@@ -1206,6 +1291,7 @@ function TaskCard({
         {blockingDependencies.length > 0 && (
           <BlockedPill count={blockingDependencies.length} />
         )}
+        <TestStatusPill status={task.testStatus} />
         {task.requiresHumanReview !== false && <HumanReviewPill />}
         {task.pr && <PrPill value={task.pr} />}
       </div>
@@ -1323,6 +1409,7 @@ function TasksList({
                 {blockingDependencies.length > 0 && (
                   <BlockedPill count={blockingDependencies.length} />
                 )}
+                <TestStatusPill status={task.testStatus} />
                 {task.requiresHumanReview !== false && <HumanReviewPill />}
                 {task.tags.slice(0, 2).map((tag) => (
                   <TagPill key={tag.label} tag={tag} />
@@ -1678,6 +1765,7 @@ function TaskDetailPanel({
   contextFiles,
   onDeleteTask,
   onMoveTask,
+  onRecordRunCheck,
   onStartAgentRun,
   onUpdateTask,
   projectTasks,
@@ -1686,6 +1774,11 @@ function TaskDetailPanel({
   contextFiles: Project['contextFiles'];
   onDeleteTask: (taskId: string) => boolean;
   onMoveTask: (taskId: string, status: TaskStatus) => boolean;
+  onRecordRunCheck: (
+    taskId: string,
+    runId: string,
+    input: KavbanRecordRunCheckInput
+  ) => boolean;
   onStartAgentRun: (taskId: string) => string | null;
   onUpdateTask: (taskId: string, input: KavbanUpdateTaskInput) => boolean;
   projectTasks: Task[];
@@ -1843,6 +1936,7 @@ function TaskDetailPanel({
             ['Agent', getTaskAgent(task).name],
             ['Reviewer', getTaskReviewer(task).name],
             ['Branch', task.branch ?? 'Not planned'],
+            ['Tests', task.testStatus ?? 'Not run'],
             [
               'Human review',
               task.requiresHumanReview === false ? 'Optional' : 'Required',
@@ -1911,7 +2005,13 @@ function TaskDetailPanel({
           {agentRuns.length > 0 ? (
             <div className="space-y-3">
               {agentRuns.map((run) => (
-                <AgentRunCard key={run.id} run={run} />
+                <AgentRunCard
+                  key={run.id}
+                  onRecordCheck={(runId, input) =>
+                    onRecordRunCheck(task.id, runId, input)
+                  }
+                  run={run}
+                />
               ))}
             </div>
           ) : (
@@ -1946,6 +2046,7 @@ function WorkspaceTasks({
   onCreateTask,
   onDeleteTask,
   onMoveTask,
+  onRecordRunCheck,
   onStartAgentRun,
   onUpdateTask,
   projectName,
@@ -1960,6 +2061,11 @@ function WorkspaceTasks({
   onCreateTask: (input: KavbanCreateTaskInput) => string | null;
   onDeleteTask: (taskId: string) => boolean;
   onMoveTask: (taskId: string, status: TaskStatus) => boolean;
+  onRecordRunCheck: (
+    taskId: string,
+    runId: string,
+    input: KavbanRecordRunCheckInput
+  ) => boolean;
   onStartAgentRun: (taskId: string) => string | null;
   onUpdateTask: (taskId: string, input: KavbanUpdateTaskInput) => boolean;
   projectName: string;
@@ -2097,6 +2203,7 @@ function WorkspaceTasks({
           contextFiles={contextFiles}
           onDeleteTask={handleDeleteTask}
           onMoveTask={onMoveTask}
+          onRecordRunCheck={onRecordRunCheck}
           onStartAgentRun={onStartAgentRun}
           onUpdateTask={onUpdateTask}
           projectTasks={tasks}
@@ -2801,6 +2908,7 @@ function WorkspaceView({
   onDeleteTask,
   onMoveTask,
   onProjectTabChange,
+  onRecordRunCheck,
   onRepositoryChange,
   onSelectProject,
   onSelectTask,
@@ -2826,6 +2934,11 @@ function WorkspaceView({
   onDeleteTask: (taskId: string) => boolean;
   onMoveTask: (taskId: string, status: TaskStatus) => boolean;
   onProjectTabChange: (tab: ProjectTab) => void;
+  onRecordRunCheck: (
+    taskId: string,
+    runId: string,
+    input: KavbanRecordRunCheckInput
+  ) => boolean;
   onRepositoryChange: (input: KavbanRepositoryInput) => boolean;
   onSelectProject: (id: string) => void;
   onSelectTask: (id: string) => void;
@@ -2874,6 +2987,7 @@ function WorkspaceView({
             onCreateTask={onCreateTask}
             onDeleteTask={onDeleteTask}
             onMoveTask={onMoveTask}
+            onRecordRunCheck={onRecordRunCheck}
             onStartAgentRun={onStartAgentRun}
             onUpdateTask={onUpdateTask}
             projectName={project.name}
@@ -3008,6 +3122,7 @@ export function KavbanDashboard() {
     profile,
     project,
     projects,
+    recordAgentRunCheck,
     selectProject,
     startAgentRun,
     updateAgentRouting,
@@ -3083,6 +3198,7 @@ export function KavbanDashboard() {
               onDeleteTask={deleteTask}
               onMoveTask={moveTask}
               onProjectTabChange={setProjectTab}
+              onRecordRunCheck={recordAgentRunCheck}
               onRepositoryChange={updateProjectRepository}
               onSelectProject={selectProject}
               onSelectTask={setSelectedTaskId}

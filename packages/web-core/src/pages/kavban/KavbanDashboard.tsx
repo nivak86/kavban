@@ -2719,12 +2719,14 @@ function TaskEditForm({
 
 function TaskReadinessChecklist({
   items,
+  title = 'Run readiness',
 }: {
   items: Array<{
     detail: string;
     label: string;
     ready: boolean;
   }>;
+  title?: string;
 }) {
   const readyCount = items.filter((item) => item.ready).length;
   const allReady = readyCount === items.length;
@@ -2734,7 +2736,7 @@ function TaskReadinessChecklist({
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-sm font-semibold text-[#dce0e8]">
           <ShieldCheckIcon className="size-4 text-[#858b96]" weight="bold" />
-          Run readiness
+          {title}
         </div>
         <span
           className={cn(
@@ -2970,6 +2972,49 @@ function TaskDetailPanel({
           : 'Task is open for agent work',
       label: 'Task state',
       ready: task.status !== 'done',
+    },
+  ];
+  const mergeGuardItems = [
+    {
+      detail: task.branch ?? 'Create a task branch before PR work',
+      label: 'Task branch',
+      ready: Boolean(task.branch),
+    },
+    {
+      detail: task.pr ?? 'Open a draft PR after approval',
+      label: 'Pull request',
+      ready: Boolean(task.pr),
+    },
+    {
+      detail:
+        task.testStatus === 'passed'
+          ? 'Latest task checks passed'
+          : `Current test status: ${task.testStatus ?? 'not-run'}`,
+      label: 'Tests',
+      ready: task.testStatus === 'passed',
+    },
+    {
+      detail:
+        task.reviewStatus && task.reviewStatus !== 'changes-requested'
+          ? `AI review completed: ${task.reviewStatus}`
+          : 'AI reviewer must pass or escalate to human',
+      label: 'AI review',
+      ready: Boolean(
+        task.reviewStatus && task.reviewStatus !== 'changes-requested'
+      ),
+    },
+    {
+      detail:
+        task.approvalStatus === 'approved'
+          ? 'Human approval recorded'
+          : 'Human approval required before merge',
+      label: 'Human gate',
+      ready: task.approvalStatus === 'approved',
+    },
+    {
+      detail: `Agents cannot merge directly to ${repository.defaultBranch}`,
+      label: 'Main branch',
+      ready: true,
     },
   ];
 
@@ -3818,6 +3863,10 @@ function TaskDetailPanel({
                 Approval required before PR creation
               </div>
             )}
+            <TaskReadinessChecklist
+              items={mergeGuardItems}
+              title="Merge guard"
+            />
           </div>
         )}
 

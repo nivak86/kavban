@@ -39,6 +39,7 @@ import {
   UserIcon,
   XIcon,
 } from '@phosphor-icons/react';
+import { kavbanApi, type KavbanIntakeResponse } from '@/shared/lib/api';
 import { cn } from '@/shared/lib/utils';
 import {
   kavbanAgents,
@@ -135,6 +136,20 @@ const codexIntakeExample = JSON.stringify(
   null,
   2
 );
+const createImportPayloadFromIntake = (
+  intake: KavbanIntakeResponse
+): Record<string, unknown> => ({
+  project: intake.normalized.project_id,
+  title: intake.normalized.title,
+  description: intake.normalized.description,
+  type: intake.normalized.type,
+  priority: intake.normalized.priority,
+  suggested_agent: intake.normalized.agent.assigned,
+  requires_human_review: intake.normalized.review.human_review_required,
+  dependencies: intake.normalized.dependencies,
+  context_files: intake.normalized.context_files,
+  working_branch: intake.normalized.repo.working_branch,
+});
 const getProfileFirstName = (profile: Profile) =>
   profile.displayName.split(' ')[0] || profile.displayName;
 
@@ -1657,14 +1672,16 @@ function TaskImportPanel({
 }) {
   const [payloadText, setPayloadText] = useState(codexIntakeExample);
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   return (
     <form
       className="border-b border-[#24262b] bg-[#111214] px-6 py-5"
-      onSubmit={(event) => {
+      onSubmit={async (event) => {
         event.preventDefault();
 
         try {
+          setIsSubmitting(true);
           const parsedPayload = JSON.parse(payloadText) as unknown;
 
           if (
@@ -1676,20 +1693,27 @@ function TaskImportPanel({
             return;
           }
 
+          const intake = await kavbanApi.createCodexIntake(
+            parsedPayload as Record<string, unknown>
+          );
           const imported = onImport({
-            payload: parsedPayload as Record<string, unknown>,
+            payload: createImportPayloadFromIntake(intake),
             rawPayload: payloadText,
           });
 
           if (!imported) {
-            setError('Payload needs a title field.');
+            setError('Normalized payload needs a title field.');
             return;
           }
 
           setError('');
           setPayloadText(codexIntakeExample);
         } catch {
-          setError('Payload must be valid JSON.');
+          setError(
+            'Codex intake must be valid JSON and pass backend validation.'
+          );
+        } finally {
+          setIsSubmitting(false);
         }
       }}
     >
@@ -1758,10 +1782,11 @@ function TaskImportPanel({
             </button>
             <button
               type="submit"
-              className="flex h-9 items-center gap-2 rounded-[6px] border border-[#31553a] px-3 text-xs font-semibold text-[#78d16d] transition-colors hover:bg-[#172219]"
+              disabled={isSubmitting}
+              className="flex h-9 items-center gap-2 rounded-[6px] border border-[#31553a] px-3 text-xs font-semibold text-[#78d16d] transition-colors hover:bg-[#172219] disabled:cursor-not-allowed disabled:opacity-60"
             >
               <BracketsCurlyIcon className="size-4" weight="bold" />
-              Import task
+              {isSubmitting ? 'Importing...' : 'Import task'}
             </button>
           </div>
         </div>

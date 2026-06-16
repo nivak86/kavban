@@ -542,6 +542,7 @@ function normalizeCodexTaskPayload(
         payload.requires_human_review ?? payload.requiresHumanReview,
         projectRouting.humanReviewRequired
       ),
+      branch: getPayloadString(payload.branch ?? payload.working_branch),
       tagLabels,
       dependencies: getPayloadStringList(payload.dependencies),
       contextFiles: getCodexPayloadContextFiles(payload),

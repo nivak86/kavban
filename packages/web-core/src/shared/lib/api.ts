@@ -183,6 +183,50 @@ type ListRemoteProjectsResponse = {
   projects: RemoteProject[];
 };
 
+export type KavbanCodexIntakePayload = Record<string, unknown>;
+
+export type KavbanIntakeResponse = {
+  task_id: string;
+  status: string;
+  normalized: {
+    id: string;
+    project_id: string;
+    title: string;
+    description: string;
+    type: string;
+    priority: string;
+    status: string;
+    repo: {
+      provider: string;
+      owner: string;
+      name: string;
+      default_branch: string;
+      working_branch: string;
+    };
+    agent: {
+      assigned: string;
+      fallback: string;
+      reviewer: string;
+    };
+    dependencies: string[];
+    context_files: string[];
+    execution: {
+      run_tests: boolean;
+      create_pr: boolean;
+      auto_merge: boolean;
+      requires_human_review: boolean;
+    };
+    review: {
+      ai_review_required: boolean;
+      human_review_required: boolean;
+    };
+    created_from: {
+      source: string;
+      raw_input_id: string;
+    };
+  };
+};
+
 export type OrganizationBillingStatus =
   | 'free'
   | 'active'
@@ -312,6 +356,19 @@ export const handleApiResponse = async <T, E = T>(
   }
 
   return result.data as T;
+};
+
+export const kavbanApi = {
+  createCodexIntake: async (
+    payload: KavbanCodexIntakePayload
+  ): Promise<KavbanIntakeResponse> => {
+    const response = await makeRequest('/api/kavban/intake/codex', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+
+    return handleApiResponse<KavbanIntakeResponse>(response);
+  },
 };
 
 // Sessions API

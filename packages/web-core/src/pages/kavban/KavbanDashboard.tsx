@@ -31,6 +31,7 @@ import {
   ShieldCheckIcon,
   SlidersHorizontalIcon,
   SparkleIcon,
+  StarIcon,
   TerminalIcon,
   TrashIcon,
   TrayIcon,
@@ -667,8 +668,8 @@ function Sidebar({
   ];
 
   return (
-    <aside className="hidden w-[260px] shrink-0 border-r border-[#24262b] bg-[#111214] px-5 py-6 lg:flex lg:flex-col">
-      <div className="mb-8 flex items-center">
+    <aside className="hidden w-[360px] shrink-0 border-r border-[#24262b] bg-[#111214] px-7 py-7 lg:flex lg:flex-col">
+      <div className="mb-8 flex items-center justify-between gap-4">
         <button
           type="button"
           className="flex min-w-0 items-center gap-3 text-left"
@@ -682,9 +683,21 @@ function Sidebar({
           </span>
           <CaretDownIcon className="size-4 text-[#727884]" weight="bold" />
         </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <IconButton label="Search" icon={MagnifyingGlassIcon} />
+          <button
+            type="button"
+            onClick={() => onSectionChange('workspace')}
+            className="flex size-10 items-center justify-center rounded-full border border-[#24262b] bg-[#17181b] text-[#aeb3bd] transition-colors hover:border-[#343741] hover:text-[#dce0e8]"
+            aria-label="Open workspace"
+            title="Open workspace"
+          >
+            <PencilSimpleIcon className="size-5" weight="bold" />
+          </button>
+        </div>
       </div>
 
-      <nav className="space-y-1">
+      <nav className="space-y-2">
         {topItems.map((item) => {
           const Icon = item.icon;
 
@@ -694,7 +707,7 @@ function Sidebar({
               key={item.id}
               onClick={() => onSectionChange(item.id)}
               className={cn(
-                'flex h-10 w-full items-center gap-3 rounded-[7px] px-3 text-left text-sm font-medium transition-colors',
+                'flex h-12 w-full items-center gap-3 rounded-[7px] px-3 text-left text-[19px] font-semibold transition-colors',
                 activeSection === item.id
                   ? 'bg-[#1f2126] text-[#dce0e8]'
                   : 'text-[#9ba0aa] hover:bg-[#191b1f] hover:text-[#cfd2dc]'
@@ -712,7 +725,7 @@ function Sidebar({
           type="button"
           onClick={() => onSectionChange('profile')}
           className={cn(
-            'flex h-11 w-full items-center gap-3 rounded-[7px] px-3 text-left text-sm font-medium transition-colors',
+            'flex h-12 w-full items-center gap-3 rounded-[7px] px-3 text-left text-[18px] font-semibold transition-colors',
             activeSection === 'profile'
               ? 'bg-[#1f2126] text-[#dce0e8]'
               : 'text-[#9ba0aa] hover:bg-[#191b1f] hover:text-[#cfd2dc]'
@@ -1674,30 +1687,30 @@ function TaskCard({
       type="button"
       onClick={onSelect}
       className={cn(
-        'group relative h-[148px] w-full overflow-hidden rounded-[8px] border bg-[#1b1d20] p-4 text-left shadow-[0_8px_22px_rgba(0,0,0,0.18)] transition-colors hover:border-[#343741]',
-        selected ? 'border-[#3b3f49]' : 'border-[#24262b]'
+        'group relative h-[154px] w-full overflow-hidden rounded-[7px] border bg-[#1b1d20] px-5 py-4 text-left shadow-[0_8px_22px_rgba(0,0,0,0.2)] transition-colors hover:border-[#343741]',
+        selected ? 'border-[#30333a]' : 'border-[#24262b]'
       )}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 pr-28">
-          <p className="font-ibm-plex-mono text-sm text-[#646a75]">
+          <p className="font-ibm-plex-mono text-[15px] leading-5 text-[#646a75]">
             {task.key}
           </p>
-          <div className="mt-2 flex items-center gap-2">
+          <div className="mt-2.5 flex items-center gap-2.5">
             <StatusIcon task={task} />
-            <h3 className="truncate text-base font-medium text-[#d7d9df]">
+            <h3 className="truncate text-[19px] font-medium leading-6 text-[#d7d9df]">
               {task.title}
             </h3>
           </div>
         </div>
-        <span className="absolute right-4 top-4 inline-flex h-7 max-w-[142px] items-center gap-1.5 rounded-full border border-[#2a2c31] bg-[#17181b] px-2.5 text-sm font-medium text-[#9ca1ad]">
+        <span className="absolute right-5 top-4 inline-flex h-8 max-w-[150px] items-center gap-1.5 rounded-full border border-[#2a2c31] bg-[#17181b] px-2.5 text-sm font-semibold text-[#9ca1ad]">
           <span className="truncate">{task.state}</span>
           <AgentAvatar agent={getTaskAgent(task)} />
         </span>
       </div>
 
-      <div className="absolute bottom-4 left-4 right-4 flex min-w-0 items-center gap-1.5 overflow-hidden">
-        <span className="inline-flex size-6 items-center justify-center rounded-[5px] bg-[#282a2f] text-[#6f7682]">
+      <div className="absolute bottom-4 left-5 right-5 flex min-w-0 items-center gap-1.5 overflow-hidden">
+        <span className="inline-flex size-8 items-center justify-center rounded-[5px] bg-[#282a2f] text-[#6f7682]">
           <ChartBarIcon className="size-4" weight="bold" />
         </span>
         <LockPill task={task} />
@@ -1732,27 +1745,36 @@ function TasksBoard({
       ),
     [tasks]
   );
+  const orderedColumns = useMemo(
+    () => [
+      ...workflowColumns.filter((column) => tasksByStatus[column.id].length > 0),
+      ...workflowColumns.filter(
+        (column) => tasksByStatus[column.id].length === 0
+      ),
+    ],
+    [tasksByStatus]
+  );
 
   return (
-    <div className="w-max min-w-full px-6 py-7">
-      <div className="grid grid-flow-col auto-cols-[500px] gap-4">
-        {workflowColumns.map((column) => {
+    <div className="w-max min-w-full px-6 pb-7 pt-9">
+      <div className="grid grid-flow-col auto-cols-[520px] gap-[18px]">
+        {orderedColumns.map((column) => {
           const Icon = workflowIconByKey[column.iconKey];
           const columnTasks = tasksByStatus[column.id];
 
           return (
             <section key={column.id} className="min-w-0">
-              <div className="mb-4 flex h-8 items-center justify-between">
-                <div className="flex min-w-0 items-center gap-2">
+              <div className="mb-8 flex h-8 items-center justify-between">
+                <div className="flex min-w-0 items-center gap-3">
                   <Icon
-                    className="size-4 shrink-0"
+                    className="size-5 shrink-0"
                     style={{ color: column.color }}
                     weight="bold"
                   />
-                  <h2 className="truncate text-sm font-semibold text-[#bfc3cd]">
+                  <h2 className="truncate text-[19px] font-semibold leading-6 text-[#bfc3cd]">
                     {column.label}
                   </h2>
-                  <span className="text-sm text-[#6f7682]">
+                  <span className="text-[18px] text-[#6f7682]">
                     {columnTasks.length}
                   </span>
                 </div>
@@ -1768,7 +1790,7 @@ function TasksBoard({
                   />
                 </div>
               </div>
-              <div className="space-y-3">
+              <div className="space-y-3.5">
                 {columnTasks.map((task) => (
                   <TaskCard
                     key={task.id}
@@ -3126,60 +3148,46 @@ function WorkspaceTasks({
   return (
     <div className="flex h-full min-h-0">
       <main className="min-w-0 flex-1 overflow-auto bg-[#101113]">
-        <TopBar
-          title="Tasks"
-          eyebrow={projectName}
-          rightSlot={
-            <>
-              <div className="mr-2 flex shrink-0 rounded-[7px] bg-[#191b1f] p-1">
-                {[
-                  { id: 'board' as const, label: 'Board', icon: KanbanIcon },
-                  { id: 'list' as const, label: 'List', icon: ListChecksIcon },
-                ].map((item) => {
-                  const Icon = item.icon;
-
-                  return (
-                    <button
-                      type="button"
-                      key={item.id}
-                      onClick={() => onTaskViewChange(item.id)}
-                      className={cn(
-                        'flex h-8 items-center gap-2 rounded-[6px] px-3 text-xs font-semibold transition-colors',
-                        taskView === item.id
-                          ? 'bg-[#25272d] text-[#dce0e8]'
-                          : 'text-[#777d88] hover:text-[#cfd2dc]'
-                      )}
-                    >
-                      <Icon className="size-4" weight="bold" />
-                      {item.label}
-                    </button>
-                  );
-                })}
-              </div>
-              <IconButton
-                label="Filter tasks"
-                icon={FunnelSimpleIcon}
-                onClick={() => setIsFilterOpen((current) => !current)}
-              />
-              <IconButton label="Task display" icon={SlidersHorizontalIcon} />
-              <IconButton
-                label="Start ready queue"
-                icon={RocketIcon}
-                onClick={startReadyQueue}
-              />
-              <IconButton
-                label="Import Codex task"
-                icon={BracketsCurlyIcon}
-                onClick={openImportTask}
-              />
-              <IconButton
-                label="New task"
-                icon={PlusIcon}
-                onClick={() => openCreateTask()}
-              />
-            </>
-          }
-        />
+        <header className="flex min-h-[67px] items-center justify-between border-b border-[#24262b] bg-[#111214] px-12">
+          <div className="flex min-w-0 items-center gap-3">
+            <h1 className="truncate text-[20px] font-semibold text-[#dce0e8]">
+              Agent tasks
+            </h1>
+            <StarIcon
+              className="size-6 shrink-0 text-[#f2d14b]"
+              weight="fill"
+            />
+            <IconButton
+              label={`Import a Codex task into ${projectName}`}
+              icon={DotsThreeIcon}
+              onClick={openImportTask}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <IconButton
+              label="Filter tasks"
+              icon={FunnelSimpleIcon}
+              onClick={() => setIsFilterOpen((current) => !current)}
+            />
+            <IconButton
+              label="Task filters"
+              icon={SlidersHorizontalIcon}
+              onClick={() => setIsFilterOpen((current) => !current)}
+            />
+            <IconButton
+              label="Start ready queue"
+              icon={ChartBarIcon}
+              onClick={startReadyQueue}
+            />
+            <IconButton
+              label={taskView === 'board' ? 'Show list view' : 'Show board view'}
+              icon={taskView === 'board' ? ListChecksIcon : KanbanIcon}
+              onClick={() =>
+                onTaskViewChange(taskView === 'board' ? 'list' : 'board')
+              }
+            />
+          </div>
+        </header>
         {queueSummary && (
           <div className="flex items-center justify-between gap-3 border-b border-[#24262b] bg-[#111214] px-6 py-3 text-sm text-[#cfd2da]">
             <div className="flex min-w-0 items-center gap-2">
@@ -4127,6 +4135,36 @@ function WorkspaceView({
   selectedTaskId: string;
   taskView: TaskView;
 }) {
+  if (projectTab === 'tasks') {
+    return (
+      <WorkspaceTasks
+        agentRouting={project.agentRouting ?? kavbanDefaultAgentRouting}
+        connectors={connectors}
+        contextFiles={project.contextFiles}
+        onAddTaskComment={onAddTaskComment}
+        onCreateAiReview={onCreateAiReview}
+        onCreateTask={onCreateTask}
+        onDeleteTask={onDeleteTask}
+        onImportCodexTask={onImportCodexTask}
+        onMergeTask={onMergeTask}
+        onMoveTask={onMoveTask}
+        onOpenRollbackPullRequest={onOpenRollbackPullRequest}
+        onOpenTaskPullRequest={onOpenTaskPullRequest}
+        onPauseAgentRun={onPauseAgentRun}
+        onRecordHumanReview={onRecordHumanReview}
+        onRecordRunCheck={onRecordRunCheck}
+        onStartAgentRun={onStartAgentRun}
+        onUpdateTask={onUpdateTask}
+        projectName={project.name}
+        taskView={taskView}
+        onTaskViewChange={onTaskViewChange}
+        selectedTaskId={selectedTaskId}
+        onSelectTask={onSelectTask}
+        tasks={project.tasks}
+      />
+    );
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <TopBar
@@ -4152,33 +4190,6 @@ function WorkspaceView({
             onTabChange={onProjectTabChange}
             project={project}
             projects={projects}
-          />
-        )}
-        {projectTab === 'tasks' && (
-          <WorkspaceTasks
-            agentRouting={project.agentRouting ?? kavbanDefaultAgentRouting}
-            connectors={connectors}
-            contextFiles={project.contextFiles}
-            onAddTaskComment={onAddTaskComment}
-            onCreateAiReview={onCreateAiReview}
-            onCreateTask={onCreateTask}
-            onDeleteTask={onDeleteTask}
-            onImportCodexTask={onImportCodexTask}
-            onMergeTask={onMergeTask}
-            onMoveTask={onMoveTask}
-            onOpenRollbackPullRequest={onOpenRollbackPullRequest}
-            onOpenTaskPullRequest={onOpenTaskPullRequest}
-            onPauseAgentRun={onPauseAgentRun}
-            onRecordHumanReview={onRecordHumanReview}
-            onRecordRunCheck={onRecordRunCheck}
-            onStartAgentRun={onStartAgentRun}
-            onUpdateTask={onUpdateTask}
-            projectName={project.name}
-            taskView={taskView}
-            onTaskViewChange={onTaskViewChange}
-            selectedTaskId={selectedTaskId}
-            onSelectTask={onSelectTask}
-            tasks={project.tasks}
           />
         )}
         {projectTab === 'settings' && (
@@ -4575,8 +4586,8 @@ export function KavbanDashboard() {
   };
 
   return (
-    <div className="dark h-screen w-screen overflow-hidden bg-[#08090a] p-3 font-ibm-plex-sans text-[#c9cdd6] md:p-8">
-      <div className="flex h-full min-h-0 overflow-hidden rounded-[14px] border border-[#2b2e34] bg-[#111214] shadow-[0_24px_80px_rgba(0,0,0,0.45)] md:rounded-[22px]">
+    <div className="dark h-screen w-screen overflow-hidden bg-[#08090a] p-3 font-ibm-plex-sans text-[#c9cdd6]">
+      <div className="flex h-full min-h-0 overflow-hidden rounded-[14px] border border-[#2b2e34] bg-[#111214] shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
         <Sidebar
           activeSection={activeSection}
           onSectionChange={setActiveSection}

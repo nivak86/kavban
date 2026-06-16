@@ -94,6 +94,15 @@ const workflowColumns = kavbanWorkflowColumns;
 const agentOptions: KavbanAgentId[] = ['codex', 'claude'];
 const reviewerOptions: KavbanAgentId[] = ['reviewer', 'codex'];
 const taskPriorities: KavbanTaskPriority[] = ['High', 'Medium', 'Low'];
+const taskAdvanceActions: Partial<
+  Record<TaskStatus, { label: string; status: TaskStatus }>
+> = {
+  backlog: { label: 'Mark ready', status: 'ready' },
+  ready: { label: 'Start agent', status: 'progress' },
+  progress: { label: 'Send to AI review', status: 'ai-review' },
+  'ai-review': { label: 'Request human review', status: 'human-review' },
+  'human-review': { label: 'Mark done', status: 'done' },
+};
 const taskFormFieldClass =
   'w-full rounded-[6px] border border-[#2a2c31] bg-[#111214] px-3 text-sm text-[#dce0e8] outline-none transition-colors placeholder:text-[#626874] focus:border-[#444956]';
 const getProfileFirstName = (profile: Profile) =>
@@ -1534,12 +1543,14 @@ function TaskEditForm({
 function TaskDetailPanel({
   contextFiles,
   onDeleteTask,
+  onMoveTask,
   onUpdateTask,
   projectTasks,
   task,
 }: {
   contextFiles: Project['contextFiles'];
   onDeleteTask: (taskId: string) => boolean;
+  onMoveTask: (taskId: string, status: TaskStatus) => boolean;
   onUpdateTask: (taskId: string, input: KavbanUpdateTaskInput) => boolean;
   projectTasks: Task[];
   task: Task;
@@ -1548,6 +1559,9 @@ function TaskDetailPanel({
   const [isEditing, setIsEditing] = useState(false);
   const dependencyItems = getDependencyItems(task, projectTasks);
   const blockingDependencies = getBlockingDependencies(task, projectTasks);
+  const advanceAction = taskAdvanceActions[task.status];
+  const isAdvanceBlocked =
+    advanceAction?.status === 'progress' && blockingDependencies.length > 0;
 
   useEffect(() => {
     setIsConfirmingDelete(false);
@@ -1625,6 +1639,23 @@ function TaskDetailPanel({
       </div>
 
       <div className="space-y-5 px-5 py-5">
+        {advanceAction && (
+          <button
+            type="button"
+            disabled={isAdvanceBlocked}
+            onClick={() => onMoveTask(task.id, advanceAction.status)}
+            className={cn(
+              'flex h-9 w-full items-center justify-center gap-2 rounded-[6px] border px-3 text-xs font-semibold transition-colors',
+              isAdvanceBlocked
+                ? 'cursor-not-allowed border-[#553131] bg-[#211719] text-[#f26d6d]'
+                : 'border-[#31553a] bg-[#172219] text-[#78d16d] hover:border-[#427049]'
+            )}
+          >
+            <LightningIcon className="size-4" weight="bold" />
+            {isAdvanceBlocked ? 'Blocked' : advanceAction.label}
+          </button>
+        )}
+
         {blockingDependencies.length > 0 && (
           <div className="rounded-[7px] border border-[#553131] bg-[#211719] p-3">
             <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#f26d6d]">
@@ -1732,6 +1763,7 @@ function WorkspaceTasks({
   contextFiles,
   onCreateTask,
   onDeleteTask,
+  onMoveTask,
   onUpdateTask,
   projectName,
   taskView,
@@ -1743,6 +1775,7 @@ function WorkspaceTasks({
   contextFiles: Project['contextFiles'];
   onCreateTask: (input: KavbanCreateTaskInput) => string | null;
   onDeleteTask: (taskId: string) => boolean;
+  onMoveTask: (taskId: string, status: TaskStatus) => boolean;
   onUpdateTask: (taskId: string, input: KavbanUpdateTaskInput) => boolean;
   projectName: string;
   taskView: TaskView;
@@ -1875,6 +1908,7 @@ function WorkspaceTasks({
         <TaskDetailPanel
           contextFiles={contextFiles}
           onDeleteTask={handleDeleteTask}
+          onMoveTask={onMoveTask}
           onUpdateTask={onUpdateTask}
           projectTasks={tasks}
           task={selectedTask}
@@ -1995,6 +2029,7 @@ function WorkspaceView({
   onCreateProject,
   onCreateTask,
   onDeleteTask,
+  onMoveTask,
   onProjectTabChange,
   onSelectProject,
   onSelectTask,
@@ -2013,6 +2048,7 @@ function WorkspaceView({
   onCreateProject: (name: string) => void;
   onCreateTask: (input: KavbanCreateTaskInput) => string | null;
   onDeleteTask: (taskId: string) => boolean;
+  onMoveTask: (taskId: string, status: TaskStatus) => boolean;
   onProjectTabChange: (tab: ProjectTab) => void;
   onSelectProject: (id: string) => void;
   onSelectTask: (id: string) => void;
@@ -2057,6 +2093,7 @@ function WorkspaceView({
             contextFiles={project.contextFiles}
             onCreateTask={onCreateTask}
             onDeleteTask={onDeleteTask}
+            onMoveTask={onMoveTask}
             onUpdateTask={onUpdateTask}
             projectName={project.name}
             taskView={taskView}
@@ -2176,6 +2213,7 @@ export function KavbanDashboard() {
     createTask,
     deleteTask,
     inboxItems,
+    moveTask,
     profile,
     project,
     projects,
@@ -2245,6 +2283,7 @@ export function KavbanDashboard() {
               onCreateProject={createProject}
               onCreateTask={createTask}
               onDeleteTask={deleteTask}
+              onMoveTask={moveTask}
               onProjectTabChange={setProjectTab}
               onSelectProject={selectProject}
               onSelectTask={setSelectedTaskId}

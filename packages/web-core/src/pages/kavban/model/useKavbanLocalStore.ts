@@ -354,6 +354,53 @@ export function useKavbanLocalStore() {
     [activeProject]
   );
 
+  const moveTask = useCallback(
+    (taskId: string, status: KavbanTaskStatus) => {
+      const taskToMove = activeProject.tasks.find((task) => task.id === taskId);
+
+      if (!taskToMove || taskToMove.status === status) {
+        return false;
+      }
+
+      const updatedAt = nowIso();
+      const eventId = `evt-${taskId}-status-${Date.now().toString(36)}`;
+
+      setState((current) => ({
+        ...current,
+        projects: current.projects.map((project) =>
+          project.id === current.activeProjectId
+            ? {
+                ...project,
+                tasks: project.tasks.map((task) =>
+                  task.id === taskId
+                    ? {
+                        ...task,
+                        status,
+                        state: taskStateByStatus[status],
+                        events: [
+                          ...task.events,
+                          {
+                            id: eventId,
+                            kind: 'task-status-changed',
+                            actor: 'human',
+                            summary: `Task moved from ${task.state} to ${taskStateByStatus[status]}.`,
+                            createdAt: updatedAt,
+                          },
+                        ],
+                      }
+                    : task
+                ),
+              }
+            : project
+        ),
+        updatedAt,
+      }));
+
+      return true;
+    },
+    [activeProject]
+  );
+
   const updateConnector = useCallback(
     (
       connectorId: KavbanConnectorId,
@@ -384,6 +431,7 @@ export function useKavbanLocalStore() {
     createTask,
     deleteTask,
     inboxItems: state.inboxItems,
+    moveTask,
     profile: state.profile,
     project: activeProject,
     projects: state.projects,

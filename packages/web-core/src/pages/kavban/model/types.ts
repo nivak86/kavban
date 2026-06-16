@@ -25,6 +25,7 @@ export type KavbanInboxKind = 'codex' | 'claude' | 'approval' | 'github';
 export type KavbanTaskEventKind =
   | 'task-created'
   | 'task-updated'
+  | 'task-status-changed'
   | 'agent-started'
   | 'context-attached'
   | 'review-started'

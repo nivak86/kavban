@@ -37,6 +37,7 @@ export type KavbanRepository = {
   owner: string;
   name: string;
   defaultBranch: string;
+  localPath?: string;
 };
 
 export type KavbanAgent = {

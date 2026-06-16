@@ -37,6 +37,13 @@ export type KavbanContextFileInput = {
   injected: boolean;
 };
 
+export type KavbanRepositoryInput = {
+  owner: string;
+  name: string;
+  defaultBranch: string;
+  localPath: string;
+};
+
 const taskStateByStatus: Record<KavbanTaskStatus, string> = {
   backlog: 'Draft',
   ready: 'Ready',
@@ -132,6 +139,24 @@ function normalizeContextFile(
   };
 }
 
+function normalizeRepository(input: KavbanRepositoryInput) {
+  const owner = input.owner.trim();
+  const name = input.name.trim();
+  const defaultBranch = input.defaultBranch.trim();
+
+  if (!owner || !name || !defaultBranch) {
+    return null;
+  }
+
+  return {
+    provider: 'github' as const,
+    owner,
+    name,
+    defaultBranch,
+    localPath: input.localPath.trim(),
+  };
+}
+
 function replaceContextFilePath(paths: string[], from: string, to: string) {
   return Array.from(
     new Set(paths.map((path) => (path === from ? to : path)).filter(Boolean))
@@ -199,6 +224,40 @@ export function useKavbanLocalStore() {
       updatedAt: nowIso(),
     }));
   }, []);
+
+  const updateProjectRepository = useCallback(
+    (input: KavbanRepositoryInput) => {
+      const repository = normalizeRepository(input);
+
+      if (!repository) {
+        return false;
+      }
+
+      setState((current) => ({
+        ...current,
+        projects: current.projects.map((project) =>
+          project.id === current.activeProjectId
+            ? {
+                ...project,
+                repository,
+                connectors: {
+                  ...project.connectors,
+                  github: {
+                    ...project.connectors.github,
+                    connected: true,
+                    status: `${repository.owner}/${repository.name}`,
+                  },
+                },
+              }
+            : project
+        ),
+        updatedAt: nowIso(),
+      }));
+
+      return true;
+    },
+    []
+  );
 
   const selectProject = useCallback((projectId: string) => {
     setState((current) => {
@@ -583,6 +642,7 @@ export function useKavbanLocalStore() {
     updateConnector,
     updateContextFile,
     updateProjectBrief,
+    updateProjectRepository,
     updateTask,
   };
 }

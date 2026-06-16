@@ -55,6 +55,7 @@ import type {
   KavbanInboxItem as InboxItem,
   KavbanProfile as Profile,
   KavbanProject as Project,
+  KavbanRepositoryInput,
   KavbanTag as Tag,
   KavbanTask as Task,
   KavbanTaskPriority,
@@ -1968,21 +1969,34 @@ function WorkspaceSettings({
   brief,
   connectors,
   contextFiles,
+  repository,
   onBriefChange,
   onCreateContextFile,
   onDeleteContextFile,
+  onRepositoryChange,
   onToggleConnector,
   onUpdateContextFile,
 }: {
   brief: string;
   connectors: Record<ConnectorId, Connector>;
   contextFiles: Project['contextFiles'];
+  repository: Project['repository'];
   onBriefChange: (value: string) => void;
   onCreateContextFile: (input: KavbanContextFileInput) => boolean;
   onDeleteContextFile: (path: string) => boolean;
+  onRepositoryChange: (input: KavbanRepositoryInput) => boolean;
   onToggleConnector: (id: ConnectorId) => void;
   onUpdateContextFile: (path: string, input: KavbanContextFileInput) => boolean;
 }) {
+  const [repositoryError, setRepositoryError] = useState('');
+  const [draftRepository, setDraftRepository] = useState<KavbanRepositoryInput>(
+    {
+      owner: repository.owner,
+      name: repository.name,
+      defaultBranch: repository.defaultBranch,
+      localPath: repository.localPath ?? '',
+    }
+  );
   const [contextError, setContextError] = useState('');
   const [newContextPath, setNewContextPath] = useState('');
   const [newContextPurpose, setNewContextPurpose] = useState('');
@@ -1993,6 +2007,21 @@ function WorkspaceSettings({
   const [draftContextPath, setDraftContextPath] = useState('');
   const [draftContextPurpose, setDraftContextPurpose] = useState('');
   const [draftContextInjected, setDraftContextInjected] = useState(true);
+
+  useEffect(() => {
+    setDraftRepository({
+      owner: repository.owner,
+      name: repository.name,
+      defaultBranch: repository.defaultBranch,
+      localPath: repository.localPath ?? '',
+    });
+    setRepositoryError('');
+  }, [
+    repository.defaultBranch,
+    repository.localPath,
+    repository.name,
+    repository.owner,
+  ]);
 
   useEffect(() => {
     if (
@@ -2007,6 +2036,29 @@ function WorkspaceSettings({
     setNewContextPath('');
     setNewContextPurpose('');
     setNewContextInjected(true);
+  };
+
+  const updateDraftRepository = (
+    field: keyof KavbanRepositoryInput,
+    value: string
+  ) => {
+    setDraftRepository((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  };
+
+  const saveRepository = () => {
+    const saved = onRepositoryChange(draftRepository);
+
+    if (!saved) {
+      setRepositoryError(
+        'Owner, repository name, and default branch are required.'
+      );
+      return;
+    }
+
+    setRepositoryError('');
   };
 
   const createContextFile = () => {
@@ -2072,6 +2124,96 @@ function WorkspaceSettings({
             onChange={(event) => onBriefChange(event.target.value)}
             className="min-h-[160px] w-full resize-y rounded-[7px] border border-[#2a2c31] bg-[#111214] p-4 text-sm leading-6 text-[#dce0e8] outline-none transition-colors placeholder:text-[#626874] focus:border-[#444956]"
           />
+        </section>
+
+        <section className="rounded-[8px] border border-[#24262b] bg-[#17181b] p-5">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <GithubLogoIcon className="size-5 text-[#858b96]" weight="bold" />
+              <h2 className="text-lg font-semibold text-[#dce0e8]">
+                Repository
+              </h2>
+            </div>
+            <span className="rounded-full border border-[#2a2c31] px-2 py-1 font-ibm-plex-mono text-xs font-semibold text-[#858b96]">
+              {repository.owner}/{repository.name}
+            </span>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="block">
+              <span className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#777d88]">
+                <UserIcon className="size-3.5" weight="bold" />
+                Owner
+              </span>
+              <input
+                value={draftRepository.owner}
+                onChange={(event) =>
+                  updateDraftRepository('owner', event.target.value)
+                }
+                className={cn(taskFormFieldClass, 'h-9')}
+                placeholder="nivak86"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#777d88]">
+                <GithubLogoIcon className="size-3.5" weight="bold" />
+                Repository
+              </span>
+              <input
+                value={draftRepository.name}
+                onChange={(event) =>
+                  updateDraftRepository('name', event.target.value)
+                }
+                className={cn(taskFormFieldClass, 'h-9')}
+                placeholder="kavban"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#777d88]">
+                <GitBranchIcon className="size-3.5" weight="bold" />
+                Default branch
+              </span>
+              <input
+                value={draftRepository.defaultBranch}
+                onChange={(event) =>
+                  updateDraftRepository('defaultBranch', event.target.value)
+                }
+                className={cn(taskFormFieldClass, 'h-9')}
+                placeholder="main"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#777d88]">
+                <TerminalIcon className="size-3.5" weight="bold" />
+                Local path
+              </span>
+              <input
+                value={draftRepository.localPath}
+                onChange={(event) =>
+                  updateDraftRepository('localPath', event.target.value)
+                }
+                className={cn(taskFormFieldClass, 'h-9')}
+                placeholder="/Users/kavinbakhda/Desktop/KAVBAN"
+              />
+            </label>
+          </div>
+
+          {repositoryError && (
+            <p className="mt-4 rounded-[6px] border border-[#5c3434] bg-[#211719] px-3 py-2 text-xs font-semibold text-[#f26d6d]">
+              {repositoryError}
+            </p>
+          )}
+
+          <div className="mt-4 flex justify-end">
+            <button
+              type="button"
+              onClick={saveRepository}
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-[6px] border border-[#31553a] px-3 text-xs font-semibold text-[#78d16d] transition-colors hover:bg-[#172219]"
+            >
+              <CheckCircleIcon className="size-4" weight="bold" />
+              Save repository
+            </button>
+          </div>
         </section>
 
         <section className="rounded-[8px] border border-[#24262b] bg-[#17181b] p-5">
@@ -2304,6 +2446,7 @@ function WorkspaceView({
   onDeleteTask,
   onMoveTask,
   onProjectTabChange,
+  onRepositoryChange,
   onSelectProject,
   onSelectTask,
   onTaskViewChange,
@@ -2326,6 +2469,7 @@ function WorkspaceView({
   onDeleteTask: (taskId: string) => boolean;
   onMoveTask: (taskId: string, status: TaskStatus) => boolean;
   onProjectTabChange: (tab: ProjectTab) => void;
+  onRepositoryChange: (input: KavbanRepositoryInput) => boolean;
   onSelectProject: (id: string) => void;
   onSelectTask: (id: string) => void;
   onTaskViewChange: (view: TaskView) => void;
@@ -2385,9 +2529,11 @@ function WorkspaceView({
             brief={project.brief}
             connectors={connectors}
             contextFiles={project.contextFiles}
+            repository={project.repository}
             onBriefChange={onBriefChange}
             onCreateContextFile={onCreateContextFile}
             onDeleteContextFile={onDeleteContextFile}
+            onRepositoryChange={onRepositoryChange}
             onToggleConnector={onToggleConnector}
             onUpdateContextFile={onUpdateContextFile}
           />
@@ -2504,6 +2650,7 @@ export function KavbanDashboard() {
     updateConnector,
     updateContextFile,
     updateProjectBrief,
+    updateProjectRepository,
     updateTask,
   } = useKavbanLocalStore();
   const [activeSection, setActiveSection] = useState<AppSection>('workspace');
@@ -2571,6 +2718,7 @@ export function KavbanDashboard() {
               onDeleteTask={deleteTask}
               onMoveTask={moveTask}
               onProjectTabChange={setProjectTab}
+              onRepositoryChange={updateProjectRepository}
               onSelectProject={selectProject}
               onSelectTask={setSelectedTaskId}
               onTaskViewChange={setTaskView}

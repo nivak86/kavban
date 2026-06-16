@@ -269,6 +269,7 @@ export const kavbanProject: KavbanProject = {
     owner: 'nivak86',
     name: 'kavban',
     defaultBranch: 'main',
+    localPath: '/Users/kavinbakhda/Desktop/KAVBAN',
   },
   workflowColumns: kavbanWorkflowColumns,
   contextFiles: [

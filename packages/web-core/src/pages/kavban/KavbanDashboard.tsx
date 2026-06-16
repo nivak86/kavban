@@ -57,6 +57,7 @@ import type {
   KavbanConnector as Connector,
   KavbanConnectorId as ConnectorId,
   KavbanContextFileInput,
+  KavbanCreateAiReviewInput,
   KavbanCreateTaskInput,
   KavbanAgentId,
   KavbanImportCodexTaskInput,
@@ -71,6 +72,7 @@ import type {
   KavbanRecordRunCheckInput,
   KavbanRecordHumanReviewInput,
   KavbanRepositoryInput,
+  KavbanReviewStatus,
   KavbanTag as Tag,
   KavbanTask as Task,
   KavbanTaskPriority,
@@ -113,6 +115,38 @@ const workflowColumns = kavbanWorkflowColumns;
 const agentOptions: KavbanAgentId[] = ['codex', 'claude'];
 const reviewerOptions: KavbanAgentId[] = ['reviewer', 'codex'];
 const taskPriorities: KavbanTaskPriority[] = ['High', 'Medium', 'Low'];
+const aiReviewOutcomeOptions: Array<{
+  className: string;
+  icon: PhosphorIcon;
+  label: string;
+  note: string;
+  status: KavbanReviewStatus;
+}> = [
+  {
+    className:
+      'border-[#31553a] bg-[#172219] text-[#78d16d] hover:border-[#427049]',
+    icon: CheckCircleIcon,
+    label: 'Pass',
+    note: 'AI reviewer passed the task and found it ready for the next gate.',
+    status: 'passed',
+  },
+  {
+    className:
+      'border-[#3b334f] bg-[#1f1b2a] text-[#d6cdfd] hover:border-[#554975]',
+    icon: ShieldCheckIcon,
+    label: 'Needs human',
+    note: 'AI reviewer needs a human decision before the task can continue.',
+    status: 'needs-human',
+  },
+  {
+    className:
+      'border-[#553131] bg-[#211719] text-[#f26d6d] hover:border-[#6b3b3b]',
+    icon: XIcon,
+    label: 'Fixes',
+    note: 'AI reviewer requested fixes before this task can proceed.',
+    status: 'changes-requested',
+  },
+];
 const taskAdvanceActions: Partial<
   Record<TaskStatus, { label: string; status: TaskStatus }>
 > = {
@@ -519,6 +553,36 @@ function ReviewReportCard({
   report: NonNullable<Task['reviewReports']>[number];
 }) {
   const reviewer = kavbanAgents[report.reviewerId];
+  const statusMeta = {
+    passed: {
+      checkClass: 'text-[#78d16d]',
+      icon: CheckCircleIcon,
+      label: 'Passed',
+      textClass: 'text-[#78d16d]',
+    },
+    'needs-human': {
+      checkClass: 'text-[#d6cdfd]',
+      icon: ShieldCheckIcon,
+      label: 'Needs human',
+      textClass: 'text-[#d6cdfd]',
+    },
+    'changes-requested': {
+      checkClass: 'text-[#f26d6d]',
+      icon: XIcon,
+      label: 'Fixes required',
+      textClass: 'text-[#f26d6d]',
+    },
+  } satisfies Record<
+    NonNullable<Task['reviewStatus']>,
+    {
+      checkClass: string;
+      icon: PhosphorIcon;
+      label: string;
+      textClass: string;
+    }
+  >;
+  const meta = statusMeta[report.status];
+  const StatusIcon = meta.icon;
 
   return (
     <div className="rounded-[7px] border border-[#24262b] bg-[#17181b] p-3">
@@ -529,8 +593,14 @@ function ReviewReportCard({
             <p className="truncate text-sm font-semibold text-[#dce0e8]">
               {reviewer.name}
             </p>
-            <p className="font-ibm-plex-mono text-[11px] uppercase text-[#6f7682]">
-              {report.status}
+            <p
+              className={cn(
+                'flex items-center gap-1 font-ibm-plex-mono text-[11px] uppercase',
+                meta.textClass
+              )}
+            >
+              <StatusIcon className="size-3" weight="bold" />
+              {meta.label}
             </p>
           </div>
         </div>
@@ -542,9 +612,9 @@ function ReviewReportCard({
       <div className="mt-3 space-y-2">
         {report.checks.map((check) => (
           <div key={check} className="flex gap-2 text-xs text-[#8d939f]">
-            <CheckCircleIcon
-              className="mt-0.5 size-3.5 shrink-0 text-[#78d16d]"
-              weight="fill"
+            <StatusIcon
+              className={cn('mt-0.5 size-3.5 shrink-0', meta.checkClass)}
+              weight={report.status === 'passed' ? 'fill' : 'bold'}
             />
             <span>{check}</span>
           </div>
@@ -2482,7 +2552,10 @@ function TaskDetailPanel({
     taskId: string,
     input: KavbanAddTaskCommentInput
   ) => boolean;
-  onCreateAiReview: (taskId: string) => string | null;
+  onCreateAiReview: (
+    taskId: string,
+    input?: KavbanCreateAiReviewInput
+  ) => string | null;
   onDeleteTask: (taskId: string) => boolean;
   onMergeTask: (taskId: string) => boolean;
   onMoveTask: (taskId: string, status: TaskStatus) => boolean;
@@ -2799,14 +2872,41 @@ function TaskDetailPanel({
         )}
 
         {canRunAiReview && (
-          <button
-            type="button"
-            onClick={() => onCreateAiReview(task.id)}
-            className="flex h-9 w-full items-center justify-center gap-2 rounded-[6px] border border-[#334b70] bg-[#141c2a] px-3 text-xs font-semibold text-[#8bbcff] transition-colors hover:border-[#43618f]"
-          >
-            <SparkleIcon className="size-4" weight="bold" />
-            Run AI review
-          </button>
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={() => onCreateAiReview(task.id)}
+              className="flex h-9 w-full items-center justify-center gap-2 rounded-[6px] border border-[#334b70] bg-[#141c2a] px-3 text-xs font-semibold text-[#8bbcff] transition-colors hover:border-[#43618f]"
+            >
+              <SparkleIcon className="size-4" weight="bold" />
+              Run AI review
+            </button>
+            <div className="grid grid-cols-3 gap-2">
+              {aiReviewOutcomeOptions.map((option) => {
+                const Icon = option.icon;
+
+                return (
+                  <button
+                    key={option.status}
+                    type="button"
+                    onClick={() =>
+                      onCreateAiReview(task.id, {
+                        note: option.note,
+                        status: option.status,
+                      })
+                    }
+                    className={cn(
+                      'flex h-8 items-center justify-center gap-1.5 rounded-[6px] border px-2 text-[11px] font-semibold transition-colors',
+                      option.className
+                    )}
+                  >
+                    <Icon className="size-3.5" weight="bold" />
+                    <span className="truncate">{option.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         )}
 
         {canOpenTaskPullRequest && (
@@ -3491,7 +3591,10 @@ function WorkspaceTasks({
   agentRouting: KavbanAgentRoutingInput;
   connectors: Record<ConnectorId, Connector>;
   contextFiles: Project['contextFiles'];
-  onCreateAiReview: (taskId: string) => string | null;
+  onCreateAiReview: (
+    taskId: string,
+    input?: KavbanCreateAiReviewInput
+  ) => string | null;
   onAddTaskComment: (
     taskId: string,
     input: KavbanAddTaskCommentInput
@@ -4906,7 +5009,10 @@ function WorkspaceView({
   onAgentRoutingChange: (input: KavbanAgentRoutingInput) => boolean;
   onBriefChange: (value: string) => void;
   onCreateContextFile: (input: KavbanContextFileInput) => boolean;
-  onCreateAiReview: (taskId: string) => string | null;
+  onCreateAiReview: (
+    taskId: string,
+    input?: KavbanCreateAiReviewInput
+  ) => string | null;
   onCreateProject: (name: string) => void;
   onCreateTask: (input: KavbanCreateTaskInput) => string | null;
   onDeleteContextFile: (path: string) => boolean;

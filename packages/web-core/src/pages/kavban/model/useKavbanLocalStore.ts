@@ -68,6 +68,11 @@ export type KavbanRecordHumanReviewInput = {
   note?: string;
 };
 
+export type KavbanCreateAiReviewInput = {
+  status?: KavbanReviewStatus;
+  note?: string;
+};
+
 export type KavbanAddTaskCommentInput = {
   body: string;
 };
@@ -1354,7 +1359,7 @@ export function useKavbanLocalStore() {
   );
 
   const createAiReview = useCallback(
-    (taskId: string) => {
+    (taskId: string, input: KavbanCreateAiReviewInput = {}) => {
       const taskToReview = activeProject.tasks.find(
         (task) => task.id === taskId
       );
@@ -1366,29 +1371,60 @@ export function useKavbanLocalStore() {
       const updatedAt = nowIso();
       const reportId = `review-${taskId}-${Date.now().toString(36)}`;
       const reviewStatus: KavbanReviewStatus =
-        taskToReview.requiresHumanReview === false ? 'passed' : 'needs-human';
+        input.status ??
+        (taskToReview.requiresHumanReview === false
+          ? 'passed'
+          : 'needs-human');
       const nextStatus: KavbanTaskStatus =
-        taskToReview.requiresHumanReview === false
-          ? 'approved'
-          : 'human-review';
+        reviewStatus === 'changes-requested'
+          ? 'fix-required'
+          : reviewStatus === 'needs-human' ||
+              taskToReview.requiresHumanReview !== false
+            ? 'human-review'
+            : 'approved';
       const reviewer = kavbanAgents[taskToReview.reviewerId];
+      const reviewSummary =
+        input.note?.trim() ||
+        (reviewStatus === 'changes-requested'
+          ? `${reviewer.name} reviewed ${taskToReview.key}; changes are required before this can return to human review.`
+          : reviewStatus === 'needs-human'
+            ? `${reviewer.name} reviewed ${taskToReview.key}; a human decision is needed before PR creation.`
+            : `${reviewer.name} reviewed ${taskToReview.key}; tests passed and the branch is ready for ${
+                nextStatus === 'approved' ? 'PR creation' : 'human review'
+              }.`);
+      const reviewChecks =
+        reviewStatus === 'changes-requested'
+          ? [
+              'Task instructions were compared against the latest agent output.',
+              'The reviewer found follow-up work before approval.',
+              'The task should be reassigned to the worker with the review feedback.',
+              'Branch and PR creation stay blocked until fixes are recorded.',
+            ]
+          : reviewStatus === 'needs-human'
+            ? [
+                'Task instructions were matched against the implementation intent.',
+                'Latest agent run has a passing check result.',
+                'The reviewer found a product or risk decision for a human.',
+                'Human approval is required before PR creation.',
+              ]
+            : [
+                'Task instructions were matched against the implementation intent.',
+                'Latest agent run has a passing check result.',
+                'Context files and dependency blockers were reviewed.',
+                'Branch scope is ready for the next approval step.',
+              ];
       const report = {
         id: reportId,
         reviewerId: taskToReview.reviewerId,
         status: reviewStatus,
-        summary: `${reviewer.name} reviewed ${taskToReview.key}; tests passed and the branch is ready for ${
-          nextStatus === 'approved' ? 'PR creation' : 'human review'
-        }.`,
+        summary: reviewSummary,
         risk:
-          taskToReview.priority === 'High'
+          reviewStatus === 'changes-requested'
+            ? ('high' as const)
+            : taskToReview.priority === 'High'
             ? ('medium' as const)
             : ('low' as const),
-        checks: [
-          'Task instructions were matched against the implementation intent.',
-          'Latest agent run has a passing check result.',
-          'Context files and dependency blockers were reviewed.',
-          'Branch scope is ready for the next approval step.',
-        ],
+        checks: reviewChecks,
         createdAt: updatedAt,
       };
 
@@ -1407,7 +1443,9 @@ export function useKavbanLocalStore() {
                         approvalStatus:
                           nextStatus === 'approved'
                             ? 'approved'
-                            : task.approvalStatus,
+                            : reviewStatus === 'changes-requested'
+                              ? 'changes-requested'
+                              : task.approvalStatus,
                         reviewStatus,
                         reviewReports: [report, ...(task.reviewReports ?? [])],
                         events: [
@@ -1426,6 +1464,30 @@ export function useKavbanLocalStore() {
                             summary: `${reviewer.name} completed AI review with ${reviewStatus}.`,
                             createdAt: updatedAt,
                           },
+                          ...(nextStatus === 'human-review'
+                            ? [
+                                {
+                                  id: `evt-${reportId}-approval-needed`,
+                                  kind: 'approval-needed' as const,
+                                  actor: 'system' as const,
+                                  summary:
+                                    'Human review required after AI review.',
+                                  createdAt: updatedAt,
+                                },
+                              ]
+                            : []),
+                          ...(nextStatus === 'fix-required'
+                            ? [
+                                {
+                                  id: `evt-${reportId}-changes-requested`,
+                                  kind: 'changes-requested' as const,
+                                  actor: task.reviewerId,
+                                  summary:
+                                    'AI reviewer requested fixes before approval.',
+                                  createdAt: updatedAt,
+                                },
+                              ]
+                            : []),
                         ],
                       }
                     : task

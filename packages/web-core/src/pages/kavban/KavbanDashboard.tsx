@@ -409,6 +409,10 @@ type TaskBlockerSummary = {
   count: number;
   title: string;
 };
+type QueueTaskItem = {
+  blockerSummary: TaskBlockerSummary | null;
+  task: Task;
+};
 const getTaskBlockerSummary = (
   task: Task,
   projectTasks: Task[],
@@ -953,6 +957,134 @@ function WaitingPill({ summary }: { summary: TaskBlockerSummary }) {
       <ClockIcon className="size-3.5" weight="bold" />
       Waiting {summary.count}
     </span>
+  );
+}
+
+function QueueMonitor({
+  activeRunTasks,
+  onDismissSummary,
+  onSelectTask,
+  queueSummary,
+  readyItems,
+  runnableCount,
+  waitingCount,
+}: {
+  activeRunTasks: Task[];
+  onDismissSummary: () => void;
+  onSelectTask: (taskId: string) => void;
+  queueSummary: string;
+  readyItems: QueueTaskItem[];
+  runnableCount: number;
+  waitingCount: number;
+}) {
+  const stats = [
+    {
+      label: 'Ready queue',
+      value: readyItems.length,
+      tone: 'text-[#dce0e8]',
+    },
+    {
+      label: 'Runnable',
+      value: runnableCount,
+      tone: 'text-[#78d16d]',
+    },
+    {
+      label: 'Waiting',
+      value: waitingCount,
+      tone: waitingCount > 0 ? 'text-[#f2d14b]' : 'text-[#777d88]',
+    },
+    {
+      label: 'Active runs',
+      value: activeRunTasks.length,
+      tone: activeRunTasks.length > 0 ? 'text-[#8bbcff]' : 'text-[#777d88]',
+    },
+  ];
+
+  return (
+    <section className="border-b border-[#24262b] bg-[#111214] px-6 py-4">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(360px,520px)] xl:items-start">
+        <div className="min-w-0">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2">
+              <RocketIcon className="size-4 shrink-0 text-[#78d16d]" weight="bold" />
+              <h2 className="truncate text-sm font-semibold text-[#dce0e8]">
+                Queue monitor
+              </h2>
+            </div>
+            {queueSummary && (
+              <button
+                type="button"
+                aria-label="Dismiss queue summary"
+                onClick={onDismissSummary}
+                className="flex size-7 shrink-0 items-center justify-center rounded-[6px] text-[#777d88] transition-colors hover:bg-[#202227] hover:text-[#cfd2da]"
+              >
+                <XIcon className="size-4" weight="bold" />
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+            {stats.map((stat) => (
+              <div
+                key={stat.label}
+                className="rounded-[7px] border border-[#24262b] bg-[#17181b] px-3 py-2"
+              >
+                <div className="text-[11px] font-semibold text-[#777d88]">
+                  {stat.label}
+                </div>
+                <div
+                  className={cn(
+                    'mt-1 font-ibm-plex-mono text-lg font-semibold',
+                    stat.tone
+                  )}
+                >
+                  {stat.value}
+                </div>
+              </div>
+            ))}
+          </div>
+          {queueSummary && (
+            <p className="mt-3 truncate text-sm text-[#cfd2da]">
+              {queueSummary}
+            </p>
+          )}
+        </div>
+
+        <div className="min-w-0 rounded-[7px] border border-[#24262b] bg-[#17181b] p-2">
+          {readyItems.length > 0 ? (
+            <div className="space-y-1">
+              {readyItems.slice(0, 4).map((item) => (
+                <button
+                  key={item.task.id}
+                  type="button"
+                  onClick={() => onSelectTask(item.task.id)}
+                  className="grid min-h-10 w-full grid-cols-[72px_minmax(0,1fr)_auto] items-center gap-2 rounded-[6px] px-2 text-left text-xs transition-colors hover:bg-[#202227]"
+                >
+                  <span className="font-ibm-plex-mono text-[#777d88]">
+                    {item.task.key}
+                  </span>
+                  <span className="min-w-0 truncate font-semibold text-[#cfd2da]">
+                    {item.task.title}
+                  </span>
+                  {item.blockerSummary ? (
+                    <WaitingPill summary={item.blockerSummary} />
+                  ) : (
+                    <span className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-[5px] border border-[#31553a] bg-[#172219] px-2 text-xs font-medium text-[#78d16d]">
+                      <CheckCircleIcon className="size-3.5" weight="fill" />
+                      Runnable
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="flex min-h-10 items-center gap-2 rounded-[6px] px-2 text-sm text-[#777d88]">
+              <ClockIcon className="size-4" weight="bold" />
+              No ready tasks queued
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -4091,18 +4223,32 @@ function WorkspaceTasks({
     statusFilter !== 'all',
     agentFilter !== 'all',
   ].filter(Boolean).length;
-  const runnableReadyTasks = useMemo(
+  const readyQueueItems = useMemo(
     () =>
-      readyTasks.filter(
-        (task) =>
-          !task.lockedBy &&
-          getBlockingDependencies(task, tasks).length === 0 &&
-          getMissingTaskRunConnectors(connectors, task).length === 0 &&
-          getMissingTaskContextFiles(contextFiles, task).length === 0
-      ),
+      readyTasks.map((task) => ({
+        blockerSummary: getTaskBlockerSummary(
+          task,
+          tasks,
+          connectors,
+          contextFiles
+        ),
+        task,
+      })),
     [connectors, contextFiles, readyTasks, tasks]
   );
-  const waitingReadyTaskCount = readyTasks.length - runnableReadyTasks.length;
+  const runnableReadyTasks = useMemo(
+    () =>
+      readyQueueItems
+        .filter((item) => !item.blockerSummary)
+        .map((item) => item.task),
+    [readyQueueItems]
+  );
+  const waitingReadyTaskCount =
+    readyQueueItems.length - runnableReadyTasks.length;
+  const activeRunTasks = useMemo(
+    () => tasks.filter((task) => Boolean(task.lockedBy)),
+    [tasks]
+  );
 
   const openCreateTask = (status: TaskStatus = 'backlog') => {
     setTaskCreateStatus(status);
@@ -4285,22 +4431,15 @@ function WorkspaceTasks({
             />
           </div>
         </header>
-        {queueSummary && (
-          <div className="flex items-center justify-between gap-3 border-b border-[#24262b] bg-[#111214] px-6 py-3 text-sm text-[#cfd2da]">
-            <div className="flex min-w-0 items-center gap-2">
-              <RocketIcon className="size-4 shrink-0 text-[#78d16d]" weight="bold" />
-              <span className="truncate">{queueSummary}</span>
-            </div>
-            <button
-              type="button"
-              aria-label="Dismiss queue summary"
-              onClick={() => setQueueSummary('')}
-              className="flex size-7 shrink-0 items-center justify-center rounded-[6px] text-[#777d88] transition-colors hover:bg-[#202227] hover:text-[#cfd2da]"
-            >
-              <XIcon className="size-4" weight="bold" />
-            </button>
-          </div>
-        )}
+        <QueueMonitor
+          activeRunTasks={activeRunTasks}
+          onDismissSummary={() => setQueueSummary('')}
+          onSelectTask={handleSelectTask}
+          queueSummary={queueSummary}
+          readyItems={readyQueueItems}
+          runnableCount={runnableReadyTasks.length}
+          waitingCount={waitingReadyTaskCount}
+        />
         {isFilterOpen && (
           <div className="border-b border-[#24262b] bg-[#111214] px-6 py-4">
             <div className="grid gap-3 lg:grid-cols-[minmax(240px,1fr)_180px_180px_auto] lg:items-end">

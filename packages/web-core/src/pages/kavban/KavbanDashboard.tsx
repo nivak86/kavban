@@ -5643,6 +5643,31 @@ function WorkspaceSettings({
     setContextError('');
     resetNewContextFile();
   };
+  const restoreRequiredContextFiles = () => {
+    const restoredCount = missingRequiredContextFiles.reduce((count, path) => {
+      const defaultFile = kavbanDefaultContextFiles.find(
+        (file) => file.path === path
+      );
+
+      if (!defaultFile) {
+        return count;
+      }
+
+      const created = onCreateContextFile({
+        path: defaultFile.path,
+        purpose: defaultFile.purpose,
+        injected: defaultFile.injected,
+      });
+
+      return created ? count + 1 : count;
+    }, 0);
+
+    setContextError(
+      restoredCount === missingRequiredContextFiles.length
+        ? ''
+        : 'Some required context files could not be restored.'
+    );
+  };
 
   const startEditingContextFile = (file: Project['contextFiles'][number]) => {
     setContextError('');
@@ -5946,9 +5971,19 @@ function WorkspaceSettings({
 
           {missingRequiredContextFiles.length > 0 && (
             <div className="mb-4 rounded-[7px] border border-[#5b4a22] bg-[#241f15] p-3">
-              <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#f2d14b]">
-                <FileTextIcon className="size-4" weight="bold" />
-                Required context missing
+              <div className="mb-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-2 text-sm font-semibold text-[#f2d14b]">
+                  <FileTextIcon className="size-4" weight="bold" />
+                  Required context missing
+                </div>
+                <button
+                  type="button"
+                  onClick={restoreRequiredContextFiles}
+                  className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-[6px] border border-[#5b4a22] bg-[#17181b] px-3 text-xs font-semibold text-[#f2d14b] transition-colors hover:border-[#7a622d]"
+                >
+                  <PlusIcon className="size-3.5" weight="bold" />
+                  Restore required
+                </button>
               </div>
               <div className="flex flex-wrap gap-2">
                 {missingRequiredContextFiles.map((path) => (

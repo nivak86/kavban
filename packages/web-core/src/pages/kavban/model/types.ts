@@ -35,6 +35,7 @@ export type KavbanTaskEventKind =
   | 'approval-needed'
   | 'human-approved'
   | 'changes-requested'
+  | 'task-commented'
   | 'pr-opened';
 
 export type KavbanRepository = {
@@ -122,6 +123,13 @@ export type KavbanReviewReport = {
   createdAt: string;
 };
 
+export type KavbanTaskComment = {
+  id: string;
+  actor: KavbanAgentId | 'human';
+  body: string;
+  createdAt: string;
+};
+
 export type KavbanTask = {
   id: string;
   key: string;
@@ -143,6 +151,7 @@ export type KavbanTask = {
   reviewReports?: KavbanReviewReport[];
   reviewStatus?: KavbanReviewStatus;
   approvalStatus?: KavbanApprovalStatus;
+  comments?: KavbanTaskComment[];
   events: KavbanTaskEvent[];
 };
 

@@ -49,6 +49,10 @@ export type KavbanRecordHumanReviewInput = {
   note?: string;
 };
 
+export type KavbanAddTaskCommentInput = {
+  body: string;
+};
+
 export type KavbanContextFileInput = {
   path: string;
   purpose: string;
@@ -1055,6 +1059,63 @@ export function useKavbanLocalStore() {
     [activeProject.tasks]
   );
 
+  const addTaskComment = useCallback(
+    (taskId: string, input: KavbanAddTaskCommentInput) => {
+      const body = input.body.trim();
+      const taskToComment = activeProject.tasks.find(
+        (task) => task.id === taskId
+      );
+
+      if (!taskToComment || !body) {
+        return false;
+      }
+
+      const updatedAt = nowIso();
+      const commentId = `comment-${taskId}-${Date.now().toString(36)}`;
+
+      setState((current) => ({
+        ...current,
+        projects: current.projects.map((project) =>
+          project.id === current.activeProjectId
+            ? {
+                ...project,
+                tasks: project.tasks.map((task) =>
+                  task.id === taskId
+                    ? {
+                        ...task,
+                        comments: [
+                          ...(task.comments ?? []),
+                          {
+                            id: commentId,
+                            actor: 'human',
+                            body,
+                            createdAt: updatedAt,
+                          },
+                        ],
+                        events: [
+                          ...task.events,
+                          {
+                            id: `evt-${commentId}`,
+                            kind: 'task-commented',
+                            actor: 'human',
+                            summary: `Comment added: ${body}`,
+                            createdAt: updatedAt,
+                          },
+                        ],
+                      }
+                    : task
+                ),
+              }
+            : project
+        ),
+        updatedAt,
+      }));
+
+      return true;
+    },
+    [activeProject.tasks]
+  );
+
   const moveTask = useCallback(
     (taskId: string, status: KavbanTaskStatus) => {
       const taskToMove = activeProject.tasks.find((task) => task.id === taskId);
@@ -1128,6 +1189,7 @@ export function useKavbanLocalStore() {
 
   return {
     activeProjectId: state.activeProjectId,
+    addTaskComment,
     createContextFile,
     createAiReview,
     createProject,

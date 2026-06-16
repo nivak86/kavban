@@ -48,6 +48,7 @@ import {
 import type {
   KavbanAgent as Agent,
   KavbanAgentRoutingInput,
+  KavbanAddTaskCommentInput,
   KavbanConnector as Connector,
   KavbanConnectorId as ConnectorId,
   KavbanContextFileInput,
@@ -1830,6 +1831,7 @@ function TaskEditForm({
 
 function TaskDetailPanel({
   contextFiles,
+  onAddTaskComment,
   onCreateAiReview,
   onDeleteTask,
   onMoveTask,
@@ -1842,6 +1844,10 @@ function TaskDetailPanel({
   task,
 }: {
   contextFiles: Project['contextFiles'];
+  onAddTaskComment: (
+    taskId: string,
+    input: KavbanAddTaskCommentInput
+  ) => boolean;
   onCreateAiReview: (taskId: string) => string | null;
   onDeleteTask: (taskId: string) => boolean;
   onMoveTask: (taskId: string, status: TaskStatus) => boolean;
@@ -1860,6 +1866,7 @@ function TaskDetailPanel({
   projectTasks: Task[];
   task: Task;
 }) {
+  const [commentText, setCommentText] = useState('');
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const dependencyItems = getDependencyItems(task, projectTasks);
@@ -1877,6 +1884,7 @@ function TaskDetailPanel({
     reviewReports.length === 0;
 
   useEffect(() => {
+    setCommentText('');
     setIsConfirmingDelete(false);
     setIsEditing(false);
   }, [task.id]);
@@ -2178,6 +2186,70 @@ function TaskDetailPanel({
         </div>
 
         <div>
+          <h3 className="mb-2 text-sm font-semibold text-[#dce0e8]">Chat</h3>
+          <form
+            className="mb-3 space-y-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+
+              const saved = onAddTaskComment(task.id, { body: commentText });
+
+              if (saved) {
+                setCommentText('');
+              }
+            }}
+          >
+            <textarea
+              value={commentText}
+              onChange={(event) => setCommentText(event.target.value)}
+              placeholder="Leave a note for the agent"
+              className={`${taskFormFieldClass} min-h-[76px] resize-y py-2 leading-5`}
+            />
+            <button
+              type="submit"
+              disabled={!commentText.trim()}
+              className="flex h-8 w-full items-center justify-center gap-2 rounded-[6px] border border-[#2a2c31] bg-[#202227] px-3 text-xs font-semibold text-[#cfd2da] transition-colors hover:border-[#3a3d46] disabled:cursor-not-allowed disabled:text-[#626874]"
+            >
+              <PencilSimpleIcon className="size-3.5" weight="bold" />
+              Add comment
+            </button>
+          </form>
+          {task.comments && task.comments.length > 0 ? (
+            <div className="space-y-2">
+              {task.comments.map((comment) => (
+                <div
+                  key={comment.id}
+                  className="rounded-[7px] border border-[#24262b] bg-[#17181b] px-3 py-2 text-sm text-[#aeb3bd]"
+                >
+                  <div className="mb-1 flex items-center justify-between gap-3 text-xs text-[#777d88]">
+                    <span>
+                      {comment.actor === 'human'
+                        ? 'Human'
+                        : kavbanAgents[comment.actor].name}
+                    </span>
+                    <span className="font-ibm-plex-mono">
+                      {new Date(comment.createdAt).toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </span>
+                  </div>
+                  <p className="leading-5">{comment.body}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 rounded-[6px] border border-[#24262b] bg-[#17181b] px-3 py-2 text-sm text-[#8d939f]">
+              <PencilSimpleIcon
+                className="size-4 text-[#777d88]"
+                weight="bold"
+              />
+              No comments yet
+            </div>
+          )}
+        </div>
+
+        <div>
           <h3 className="mb-2 text-sm font-semibold text-[#dce0e8]">
             Activity
           </h3>
@@ -2199,6 +2271,7 @@ function WorkspaceTasks({
   agentRouting,
   contextFiles,
   onCreateAiReview,
+  onAddTaskComment,
   onCreateTask,
   onDeleteTask,
   onMoveTask,
@@ -2217,6 +2290,10 @@ function WorkspaceTasks({
   agentRouting: KavbanAgentRoutingInput;
   contextFiles: Project['contextFiles'];
   onCreateAiReview: (taskId: string) => string | null;
+  onAddTaskComment: (
+    taskId: string,
+    input: KavbanAddTaskCommentInput
+  ) => boolean;
   onCreateTask: (input: KavbanCreateTaskInput) => string | null;
   onDeleteTask: (taskId: string) => boolean;
   onMoveTask: (taskId: string, status: TaskStatus) => boolean;
@@ -2365,6 +2442,7 @@ function WorkspaceTasks({
       {selectedTask && taskView === 'list' && (
         <TaskDetailPanel
           contextFiles={contextFiles}
+          onAddTaskComment={onAddTaskComment}
           onCreateAiReview={onCreateAiReview}
           onDeleteTask={handleDeleteTask}
           onMoveTask={onMoveTask}
@@ -3066,6 +3144,7 @@ function WorkspaceSettings({
 function WorkspaceView({
   activeProjectId,
   connectors,
+  onAddTaskComment,
   onAgentRoutingChange,
   onBriefChange,
   onCreateContextFile,
@@ -3095,6 +3174,10 @@ function WorkspaceView({
 }: {
   activeProjectId: string;
   connectors: Record<ConnectorId, Connector>;
+  onAddTaskComment: (
+    taskId: string,
+    input: KavbanAddTaskCommentInput
+  ) => boolean;
   onAgentRoutingChange: (input: KavbanAgentRoutingInput) => boolean;
   onBriefChange: (value: string) => void;
   onCreateContextFile: (input: KavbanContextFileInput) => boolean;
@@ -3160,6 +3243,7 @@ function WorkspaceView({
           <WorkspaceTasks
             agentRouting={project.agentRouting ?? kavbanDefaultAgentRouting}
             contextFiles={project.contextFiles}
+            onAddTaskComment={onAddTaskComment}
             onCreateAiReview={onCreateAiReview}
             onCreateTask={onCreateTask}
             onDeleteTask={onDeleteTask}
@@ -3291,6 +3375,7 @@ function ProfileView({ profile }: { profile: Profile }) {
 export function KavbanDashboard() {
   const {
     activeProjectId,
+    addTaskComment,
     createAiReview,
     createContextFile,
     createProject,
@@ -3371,6 +3456,7 @@ export function KavbanDashboard() {
             <WorkspaceView
               activeProjectId={activeProjectId}
               connectors={project.connectors}
+              onAddTaskComment={addTaskComment}
               onAgentRoutingChange={updateAgentRouting}
               onBriefChange={updateProjectBrief}
               onCreateAiReview={createAiReview}

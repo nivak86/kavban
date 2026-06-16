@@ -1,11 +1,20 @@
 import { kavbanInboxItems, kavbanProfile, kavbanProject } from './seed';
 import type { KavbanInboxItem, KavbanProfile, KavbanProject } from './types';
 
-export const KAVBAN_STORAGE_VERSION = 1;
+export const KAVBAN_STORAGE_VERSION = 2;
 export const KAVBAN_STORAGE_KEY = 'kavban.local-state.v1';
 
 export type KavbanLocalState = {
   version: typeof KAVBAN_STORAGE_VERSION;
+  activeProjectId: string;
+  inboxItems: KavbanInboxItem[];
+  profile: KavbanProfile;
+  projects: KavbanProject[];
+  updatedAt: string;
+};
+
+type KavbanLocalStateV1 = {
+  version: 1;
   project: KavbanProject;
   inboxItems: KavbanInboxItem[];
   profile: KavbanProfile;
@@ -21,11 +30,14 @@ export type KavbanStorageAdapter = {
 export const nowIso = () => new Date().toISOString();
 
 export function createKavbanSeedState(): KavbanLocalState {
+  const project = structuredClone(kavbanProject);
+
   return {
     version: KAVBAN_STORAGE_VERSION,
-    project: structuredClone(kavbanProject),
+    activeProjectId: project.id,
     inboxItems: structuredClone(kavbanInboxItems),
     profile: structuredClone(kavbanProfile),
+    projects: [project],
     updatedAt: nowIso(),
   };
 }
@@ -60,6 +72,22 @@ export const browserKavbanStorageAdapter: KavbanStorageAdapter = {
   },
 };
 
+function isKavbanLocalStateV1(value: unknown): value is KavbanLocalStateV1 {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Partial<KavbanLocalStateV1>;
+
+  return (
+    candidate.version === 1 &&
+    !!candidate.project &&
+    Array.isArray(candidate.project.tasks) &&
+    Array.isArray(candidate.inboxItems) &&
+    !!candidate.profile
+  );
+}
+
 function isKavbanLocalState(value: unknown): value is KavbanLocalState {
   if (!value || typeof value !== 'object') {
     return false;
@@ -69,8 +97,9 @@ function isKavbanLocalState(value: unknown): value is KavbanLocalState {
 
   return (
     candidate.version === KAVBAN_STORAGE_VERSION &&
-    !!candidate.project &&
-    Array.isArray(candidate.project.tasks) &&
+    typeof candidate.activeProjectId === 'string' &&
+    Array.isArray(candidate.projects) &&
+    candidate.projects.every((project) => Array.isArray(project.tasks)) &&
     Array.isArray(candidate.inboxItems) &&
     !!candidate.profile
   );
@@ -79,6 +108,17 @@ function isKavbanLocalState(value: unknown): value is KavbanLocalState {
 export function migrateKavbanLocalState(value: unknown): KavbanLocalState {
   if (isKavbanLocalState(value)) {
     return value;
+  }
+
+  if (isKavbanLocalStateV1(value)) {
+    return {
+      version: KAVBAN_STORAGE_VERSION,
+      activeProjectId: value.project.id,
+      inboxItems: value.inboxItems,
+      profile: value.profile,
+      projects: [value.project],
+      updatedAt: nowIso(),
+    };
   }
 
   return createKavbanSeedState();

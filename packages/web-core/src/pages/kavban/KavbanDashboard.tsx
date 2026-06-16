@@ -463,14 +463,24 @@ function ProjectTabs({
 }
 
 function WorkspaceHome({
+  activeProjectId,
   connectors,
+  onCreateProject,
+  onSelectProject,
   onTabChange,
   project,
+  projects,
 }: {
+  activeProjectId: string;
   connectors: Record<ConnectorId, Connector>;
+  onCreateProject: (name: string) => void;
+  onSelectProject: (id: string) => void;
   onTabChange: (tab: ProjectTab) => void;
   project: Project;
+  projects: Project[];
 }) {
+  const [isCreatingProject, setIsCreatingProject] = useState(false);
+  const [newProjectName, setNewProjectName] = useState('');
   const countTasks = (statuses: TaskStatus[]) =>
     project.tasks.filter((task) => statuses.includes(task.status)).length;
 
@@ -504,6 +514,97 @@ function WorkspaceHome({
   return (
     <div className="h-full overflow-y-auto bg-[#101113] px-6 py-7">
       <div className="mx-auto max-w-6xl">
+        <section className="mb-6 rounded-[8px] border border-[#24262b] bg-[#17181b] p-5">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold text-[#dce0e8]">Projects</h2>
+            <button
+              type="button"
+              onClick={() => setIsCreatingProject(true)}
+              className="inline-flex h-8 items-center gap-2 rounded-[6px] border border-[#2a2c31] bg-[#202227] px-3 text-xs font-semibold text-[#cfd2da] transition-colors hover:border-[#3a3d46]"
+            >
+              <PlusIcon className="size-4" weight="bold" />
+              New project
+            </button>
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-3">
+            {projects.map((projectItem) => (
+              <button
+                type="button"
+                key={projectItem.id}
+                onClick={() => onSelectProject(projectItem.id)}
+                className={cn(
+                  'rounded-[7px] border p-3 text-left transition-colors',
+                  projectItem.id === activeProjectId
+                    ? 'border-[#444956] bg-[#202227]'
+                    : 'border-[#24262b] bg-[#111214] hover:border-[#343741]'
+                )}
+              >
+                <span className="mb-3 flex items-center justify-between gap-3">
+                  <span className="truncate text-sm font-semibold text-[#dce0e8]">
+                    {projectItem.name}
+                  </span>
+                  {projectItem.id === activeProjectId && (
+                    <span className="rounded-full border border-[#31553a] px-2 py-0.5 text-[11px] font-semibold text-[#78d16d]">
+                      Active
+                    </span>
+                  )}
+                </span>
+                <span className="block truncate font-ibm-plex-mono text-xs text-[#777d88]">
+                  {projectItem.repository.owner}/{projectItem.repository.name}
+                </span>
+                <span className="mt-3 block text-xs text-[#858b96]">
+                  {projectItem.tasks.length} tasks
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {isCreatingProject && (
+            <div className="mt-4 flex flex-col gap-3 rounded-[7px] border border-[#24262b] bg-[#111214] p-3 sm:flex-row sm:items-center">
+              <label className="sr-only" htmlFor="new-project-name">
+                Project name
+              </label>
+              <input
+                id="new-project-name"
+                value={newProjectName}
+                onChange={(event) => setNewProjectName(event.target.value)}
+                className="h-9 min-w-0 flex-1 rounded-[6px] border border-[#2a2c31] bg-[#17181b] px-3 text-sm text-[#dce0e8] outline-none transition-colors placeholder:text-[#626874] focus:border-[#444956]"
+                placeholder="Project name"
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const trimmedName = newProjectName.trim();
+
+                    if (!trimmedName) {
+                      return;
+                    }
+
+                    onCreateProject(trimmedName);
+                    setNewProjectName('');
+                    setIsCreatingProject(false);
+                  }}
+                  className="h-9 rounded-[6px] border border-[#31553a] px-3 text-xs font-semibold text-[#78d16d] transition-colors hover:bg-[#172219]"
+                >
+                  Create
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewProjectName('');
+                    setIsCreatingProject(false);
+                  }}
+                  className="h-9 rounded-[6px] border border-[#2a2c31] px-3 text-xs font-semibold text-[#9ca1ad] transition-colors hover:bg-[#202227]"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
+
         <div className="mb-6 grid gap-4 md:grid-cols-4">
           {stats.map((stat) => {
             const Icon = stat.icon;
@@ -1036,25 +1137,33 @@ function WorkspaceSettings({
 }
 
 function WorkspaceView({
+  activeProjectId,
   connectors,
   onBriefChange,
+  onCreateProject,
   onProjectTabChange,
+  onSelectProject,
   onSelectTask,
   onTaskViewChange,
   onToggleConnector,
   project,
   projectTab,
+  projects,
   selectedTaskId,
   taskView,
 }: {
+  activeProjectId: string;
   connectors: Record<ConnectorId, Connector>;
   onBriefChange: (value: string) => void;
+  onCreateProject: (name: string) => void;
   onProjectTabChange: (tab: ProjectTab) => void;
+  onSelectProject: (id: string) => void;
   onSelectTask: (id: string) => void;
   onTaskViewChange: (view: TaskView) => void;
   onToggleConnector: (id: ConnectorId) => void;
   project: Project;
   projectTab: ProjectTab;
+  projects: Project[];
   selectedTaskId: string;
   taskView: TaskView;
 }) {
@@ -1076,9 +1185,13 @@ function WorkspaceView({
       <div className="min-h-0 flex-1">
         {projectTab === 'home' && (
           <WorkspaceHome
+            activeProjectId={activeProjectId}
             connectors={connectors}
+            onCreateProject={onCreateProject}
+            onSelectProject={onSelectProject}
             onTabChange={onProjectTabChange}
             project={project}
+            projects={projects}
           />
         )}
         {projectTab === 'tasks' && (
@@ -1195,8 +1308,17 @@ function ProfileView({ profile }: { profile: Profile }) {
 }
 
 export function KavbanDashboard() {
-  const { inboxItems, profile, project, updateConnector, updateProjectBrief } =
-    useKavbanLocalStore();
+  const {
+    activeProjectId,
+    createProject,
+    inboxItems,
+    profile,
+    project,
+    projects,
+    selectProject,
+    updateConnector,
+    updateProjectBrief,
+  } = useKavbanLocalStore();
   const [activeSection, setActiveSection] = useState<AppSection>('workspace');
   const [projectTab, setProjectTab] = useState<ProjectTab>('tasks');
   const [taskView, setTaskView] = useState<TaskView>('board');
@@ -1252,14 +1374,18 @@ export function KavbanDashboard() {
           )}
           {activeSection === 'workspace' && (
             <WorkspaceView
+              activeProjectId={activeProjectId}
               connectors={project.connectors}
               onBriefChange={updateProjectBrief}
+              onCreateProject={createProject}
               onProjectTabChange={setProjectTab}
+              onSelectProject={selectProject}
               onSelectTask={setSelectedTaskId}
               onTaskViewChange={setTaskView}
               onToggleConnector={toggleConnector}
               project={project}
               projectTab={projectTab}
+              projects={projects}
               selectedTaskId={selectedTaskId}
               taskView={taskView}
             />

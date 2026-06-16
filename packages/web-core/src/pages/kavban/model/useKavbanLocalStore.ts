@@ -1792,6 +1792,81 @@ export function useKavbanLocalStore() {
     [activeProject.tasks]
   );
 
+  const completeDependencyForTask = useCallback(
+    (taskId: string, dependencyId: string) => {
+      const taskToUnblock = activeProject.tasks.find(
+        (task) => task.id === taskId
+      );
+      const dependencyTask = activeProject.tasks.find(
+        (task) => task.id === dependencyId || task.key === dependencyId
+      );
+
+      if (
+        !taskToUnblock ||
+        !dependencyTask ||
+        dependencyTask.id === taskId ||
+        dependencyTask.status === 'done'
+      ) {
+        return false;
+      }
+
+      const updatedAt = nowIso();
+      const eventSuffix = Date.now().toString(36);
+
+      setState((current) => ({
+        ...current,
+        projects: current.projects.map((project) =>
+          project.id === current.activeProjectId
+            ? {
+                ...project,
+                tasks: project.tasks.map((task) => {
+                  if (task.id === dependencyTask.id) {
+                    return {
+                      ...task,
+                      status: 'done',
+                      state: taskStateByStatus.done,
+                      events: [
+                        ...task.events,
+                        {
+                          id: `evt-${task.id}-dependency-done-${eventSuffix}`,
+                          kind: 'task-status-changed',
+                          actor: 'human',
+                          summary: `Dependency marked done while unblocking ${taskToUnblock.key}.`,
+                          createdAt: updatedAt,
+                        },
+                      ],
+                    };
+                  }
+
+                  if (task.id === taskId) {
+                    return {
+                      ...task,
+                      events: [
+                        ...task.events,
+                        {
+                          id: `evt-${task.id}-dependency-unblocked-${eventSuffix}`,
+                          kind: 'task-updated',
+                          actor: 'system',
+                          summary: `Dependency ${dependencyTask.key} completed; readiness will be recalculated.`,
+                          createdAt: updatedAt,
+                        },
+                      ],
+                    };
+                  }
+
+                  return task;
+                }),
+              }
+            : project
+        ),
+        updatedAt,
+      }));
+
+      return true;
+    },
+    [activeProject.tasks]
+  );
+
   const moveTask = useCallback(
     (taskId: string, status: KavbanTaskStatus) => {
       const taskToMove = activeProject.tasks.find((task) => task.id === taskId);
@@ -1916,6 +1991,7 @@ export function useKavbanLocalStore() {
   return {
     activeProjectId: state.activeProjectId,
     addTaskComment,
+    completeDependencyForTask,
     createContextFile,
     createAiReview,
     createProject,

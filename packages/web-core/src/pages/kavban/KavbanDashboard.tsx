@@ -2791,10 +2791,71 @@ function TaskReadinessChecklist({
   );
 }
 
+function TaskDependencyList({
+  items,
+  onCompleteDependency,
+  taskId,
+}: {
+  items: Array<{ key: string; task?: Task }>;
+  onCompleteDependency: (taskId: string, dependencyId: string) => boolean;
+  taskId: string;
+}) {
+  return (
+    <div className="space-y-2">
+      {items.map((item) => {
+        const dependencyTask = item.task;
+        const isDone = dependencyTask?.status === 'done';
+
+        return (
+          <div
+            key={item.key}
+            className="flex items-center gap-2 rounded-[6px] border border-[#24262b] bg-[#17181b] px-3 py-2 text-sm text-[#aeb3bd]"
+          >
+            <GitBranchIcon className="size-4 text-[#58b957]" weight="bold" />
+            <span className="font-ibm-plex-mono text-xs">
+              {dependencyTask?.key ?? item.key}
+            </span>
+            {dependencyTask && (
+              <span className="min-w-0 flex-1 truncate">
+                {dependencyTask.title}
+              </span>
+            )}
+            <span
+              className={cn(
+                'ml-auto inline-flex h-6 shrink-0 items-center rounded-[5px] border px-2 text-[11px] font-semibold',
+                isDone
+                  ? 'border-[#31553a] bg-[#172219] text-[#78d16d]'
+                  : 'border-[#5b4a22] bg-[#241f15] text-[#f2d14b]'
+              )}
+            >
+              {isDone
+                ? 'Done'
+                : dependencyTask
+                  ? dependencyTask.state
+                  : 'Missing'}
+            </span>
+            {dependencyTask && !isDone && (
+              <button
+                type="button"
+                onClick={() => onCompleteDependency(taskId, dependencyTask.id)}
+                className="inline-flex h-6 shrink-0 items-center gap-1 rounded-[5px] border border-[#31553a] bg-[#172219] px-2 text-[11px] font-semibold text-[#78d16d] transition-colors hover:border-[#427049]"
+              >
+                <CheckCircleIcon className="size-3.5" weight="fill" />
+                Mark done
+              </button>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function TaskDetailPanel({
   connectors,
   contextFiles,
   onAddTaskComment,
+  onCompleteDependency,
   onCreateAiReview,
   onDeleteTask,
   onMergeTask,
@@ -2817,6 +2878,7 @@ function TaskDetailPanel({
     taskId: string,
     input: KavbanAddTaskCommentInput
   ) => boolean;
+  onCompleteDependency: (taskId: string, dependencyId: string) => boolean;
   onCreateAiReview: (
     taskId: string,
     input?: KavbanCreateAiReviewInput
@@ -3355,6 +3417,20 @@ function TaskDetailPanel({
                   <span className="min-w-0 truncate">
                     {item.task?.title ?? 'Missing dependency'}
                   </span>
+                  {item.task && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (item.task) {
+                          onCompleteDependency(task.id, item.task.id);
+                        }
+                      }}
+                      className="ml-auto inline-flex h-6 shrink-0 items-center gap-1 rounded-[5px] border border-[#31553a] bg-[#172219] px-2 text-[11px] font-semibold text-[#78d16d] transition-colors hover:border-[#427049]"
+                    >
+                      <CheckCircleIcon className="size-3.5" weight="fill" />
+                      Mark done
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -3523,25 +3599,11 @@ function TaskDetailPanel({
             <h3 className="mb-2 text-sm font-semibold text-[#dce0e8]">
               Dependencies
             </h3>
-            <div className="space-y-2">
-              {dependencyItems.map((item) => (
-                <div
-                  key={item.key}
-                  className="flex items-center gap-2 rounded-[6px] border border-[#24262b] bg-[#17181b] px-3 py-2 text-sm text-[#aeb3bd]"
-                >
-                  <GitBranchIcon
-                    className="size-4 text-[#58b957]"
-                    weight="bold"
-                  />
-                  <span className="font-ibm-plex-mono text-xs">
-                    {item.task?.key ?? item.key}
-                  </span>
-                  {item.task && (
-                    <span className="min-w-0 truncate">{item.task.title}</span>
-                  )}
-                </div>
-              ))}
-            </div>
+            <TaskDependencyList
+              items={dependencyItems}
+              onCompleteDependency={onCompleteDependency}
+              taskId={task.id}
+            />
           </div>
         )}
           </>
@@ -3641,27 +3703,11 @@ function TaskDetailPanel({
                 <h3 className="mb-2 text-sm font-semibold text-[#dce0e8]">
                   Dependencies
                 </h3>
-                <div className="space-y-2">
-                  {dependencyItems.map((item) => (
-                    <div
-                      key={item.key}
-                      className="flex items-center gap-2 rounded-[6px] border border-[#24262b] bg-[#17181b] px-3 py-2 text-sm text-[#aeb3bd]"
-                    >
-                      <GitBranchIcon
-                        className="size-4 text-[#58b957]"
-                        weight="bold"
-                      />
-                      <span className="font-ibm-plex-mono text-xs">
-                        {item.task?.key ?? item.key}
-                      </span>
-                      {item.task && (
-                        <span className="min-w-0 truncate">
-                          {item.task.title}
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                <TaskDependencyList
+                  items={dependencyItems}
+                  onCompleteDependency={onCompleteDependency}
+                  taskId={task.id}
+                />
               </div>
             )}
           </div>
@@ -3934,6 +3980,7 @@ function WorkspaceTasks({
   contextFiles,
   onCreateAiReview,
   onAddTaskComment,
+  onCompleteDependency,
   onCreateTask,
   onDeleteTask,
   onImportCodexTask,
@@ -3966,6 +4013,7 @@ function WorkspaceTasks({
     taskId: string,
     input: KavbanAddTaskCommentInput
   ) => boolean;
+  onCompleteDependency: (taskId: string, dependencyId: string) => boolean;
   onCreateTask: (input: KavbanCreateTaskInput) => string | null;
   onDeleteTask: (taskId: string) => boolean;
   onImportCodexTask: (
@@ -4408,6 +4456,7 @@ function WorkspaceTasks({
           connectors={connectors}
           contextFiles={contextFiles}
           onAddTaskComment={onAddTaskComment}
+          onCompleteDependency={onCompleteDependency}
           onCreateAiReview={onCreateAiReview}
           onDeleteTask={handleDeleteTask}
           onMergeTask={onMergeTask}
@@ -5389,6 +5438,7 @@ function WorkspaceView({
   onAddTaskComment,
   onAgentRoutingChange,
   onBriefChange,
+  onCompleteDependency,
   onCreateContextFile,
   onCreateAiReview,
   onCreateProject,
@@ -5426,6 +5476,7 @@ function WorkspaceView({
   ) => boolean;
   onAgentRoutingChange: (input: KavbanAgentRoutingInput) => boolean;
   onBriefChange: (value: string) => void;
+  onCompleteDependency: (taskId: string, dependencyId: string) => boolean;
   onCreateContextFile: (input: KavbanContextFileInput) => boolean;
   onCreateAiReview: (
     taskId: string,
@@ -5474,6 +5525,7 @@ function WorkspaceView({
         connectors={connectors}
         contextFiles={project.contextFiles}
         onAddTaskComment={onAddTaskComment}
+        onCompleteDependency={onCompleteDependency}
         onCreateAiReview={onCreateAiReview}
         onCreateTask={onCreateTask}
         onDeleteTask={onDeleteTask}
@@ -5854,6 +5906,7 @@ export function KavbanDashboard() {
   const {
     activeProjectId,
     addTaskComment,
+    completeDependencyForTask,
     createAiReview,
     createContextFile,
     createProject,
@@ -5959,6 +6012,7 @@ export function KavbanDashboard() {
               onAddTaskComment={addTaskComment}
               onAgentRoutingChange={updateAgentRouting}
               onBriefChange={updateProjectBrief}
+              onCompleteDependency={completeDependencyForTask}
               onCreateAiReview={createAiReview}
               onCreateContextFile={createContextFile}
               onCreateProject={createProject}

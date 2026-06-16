@@ -103,6 +103,30 @@ const connectorIconById: Record<ConnectorId, PhosphorIcon> = {
   codex: BracketsCurlyIcon,
   claude: RobotIcon,
 };
+const connectorSetupDetails: Record<
+  ConnectorId,
+  {
+    capabilities: string[];
+    command: string;
+    requirements: string[];
+  }
+> = {
+  github: {
+    capabilities: ['Create branches', 'Open draft PRs', 'Sync merge events'],
+    command: 'gh auth status',
+    requirements: ['Repo access', 'GitHub auth', 'Default branch protection'],
+  },
+  codex: {
+    capabilities: ['Normalize intake', 'Run backend tasks', 'Review diffs'],
+    command: 'codex --version',
+    requirements: ['Codex CLI', 'Local repo path', 'Project context pack'],
+  },
+  claude: {
+    capabilities: ['Build UI tasks', 'Handle long context', 'Draft docs'],
+    command: 'claude --version',
+    requirements: ['Claude Code auth', 'Local repo path', 'Agent rules'],
+  },
+};
 
 const inboxIconByKind: Record<KavbanInboxKind, PhosphorIcon> = {
   codex: BracketsCurlyIcon,
@@ -4072,15 +4096,16 @@ function ConnectorCard({
   onToggle: (id: ConnectorId) => void;
 }) {
   const Icon = connectorIconById[connector.id];
+  const setup = connectorSetupDetails[connector.id];
 
   return (
     <div className="rounded-[8px] border border-[#24262b] bg-[#17181b] p-4">
       <div className="flex items-start gap-3">
-        <span className="flex size-10 items-center justify-center rounded-[8px] bg-[#202227] text-[#dce0e8]">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-[8px] bg-[#202227] text-[#dce0e8]">
           <Icon className="size-5" weight="bold" />
         </span>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <h3 className="text-sm font-semibold text-[#dce0e8]">
               {connector.name}
             </h3>
@@ -4088,21 +4113,71 @@ function ConnectorCard({
               type="button"
               onClick={() => onToggle(connector.id)}
               className={cn(
-                'rounded-[6px] border px-3 py-1 text-xs font-semibold transition-colors',
+                'inline-flex h-8 items-center gap-2 rounded-[6px] border px-3 text-xs font-semibold transition-colors',
                 connector.connected
                   ? 'border-[#31553a] text-[#78d16d] hover:bg-[#172219]'
                   : 'border-[#554531] text-[#f3cfa8] hover:bg-[#221c14]'
               )}
             >
-              {connector.connected ? 'Connected' : 'Connect'}
+              {connector.connected ? (
+                <XIcon className="size-4" weight="bold" />
+              ) : (
+                <PlugsConnectedIcon className="size-4" weight="bold" />
+              )}
+              {connector.connected ? 'Disconnect' : 'Connect'}
             </button>
           </div>
           <p className="mt-2 text-sm leading-6 text-[#8d939f]">
             {connector.description}
           </p>
-          <p className="mt-3 truncate font-ibm-plex-mono text-xs text-[#777d88]">
-            {connector.status}
-          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {setup.capabilities.map((item) => (
+              <span
+                key={item}
+                className="inline-flex h-7 items-center gap-1.5 rounded-[5px] border border-[#2a2c31] bg-[#202227] px-2 text-xs font-semibold text-[#aeb3bd]"
+              >
+                <CheckCircleIcon className="size-3.5 text-[#78d16d]" weight="bold" />
+                {item}
+              </span>
+            ))}
+          </div>
+          <div className="mt-4 grid gap-2 text-xs">
+            <div className="flex items-center justify-between gap-3 rounded-[6px] border border-[#24262b] bg-[#111214] px-3 py-2">
+              <span className="text-[#777d88]">Status</span>
+              <span
+                className={cn(
+                  'min-w-0 truncate text-right font-ibm-plex-mono',
+                  connector.connected ? 'text-[#78d16d]' : 'text-[#f3cfa8]'
+                )}
+              >
+                {connector.status}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-3 rounded-[6px] border border-[#24262b] bg-[#111214] px-3 py-2">
+              <span className="text-[#777d88]">Verify</span>
+              <span className="min-w-0 truncate text-right font-ibm-plex-mono text-[#cfd2da]">
+                {setup.command}
+              </span>
+            </div>
+          </div>
+          <div className="mt-3 space-y-2">
+            {setup.requirements.map((item) => (
+              <div key={item} className="flex gap-2 text-xs text-[#8d939f]">
+                {connector.connected ? (
+                  <CheckCircleIcon
+                    className="mt-0.5 size-3.5 shrink-0 text-[#78d16d]"
+                    weight="fill"
+                  />
+                ) : (
+                  <CircleIcon
+                    className="mt-0.5 size-3.5 shrink-0 text-[#f3cfa8]"
+                    weight="bold"
+                  />
+                )}
+                <span>{item}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>
@@ -5494,7 +5569,9 @@ export function KavbanDashboard() {
       ...connector,
       connected: !connector.connected,
       status: connector.connected
-        ? 'Needs auth'
+        ? id === 'codex'
+          ? 'Needs CLI'
+          : 'Needs auth'
         : id === 'github'
           ? `${project.repository.owner}/${project.repository.name}`
           : 'Ready',

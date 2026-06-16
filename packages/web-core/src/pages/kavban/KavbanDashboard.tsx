@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState, type ComponentType } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type ComponentType,
+  type FormEvent,
+} from 'react';
 import type { IconProps } from '@phosphor-icons/react';
 import {
   ArchiveIcon,
@@ -134,6 +140,17 @@ const inboxIconByKind: Record<KavbanInboxKind, PhosphorIcon> = {
   approval: ShieldCheckIcon,
   github: GithubLogoIcon,
 };
+const inboxFilterOptions: Array<{
+  icon: PhosphorIcon;
+  id: 'all' | KavbanInboxKind;
+  label: string;
+}> = [
+  { id: 'all', label: 'All', icon: ArchiveIcon },
+  { id: 'codex', label: 'Codex', icon: BracketsCurlyIcon },
+  { id: 'claude', label: 'Claude', icon: RobotIcon },
+  { id: 'approval', label: 'Approval', icon: ShieldCheckIcon },
+  { id: 'github', label: 'GitHub', icon: GithubLogoIcon },
+];
 
 const workflowColumns = kavbanWorkflowColumns;
 const agentOptions: KavbanAgentId[] = ['codex', 'claude'];
@@ -1084,17 +1101,71 @@ function TopBar({
 
 function InboxView({
   inboxItems,
+  onAddTaskComment,
+  onOpenTask,
   selectedInboxId,
   onSelectInbox,
   tasks,
 }: {
   inboxItems: InboxItem[];
+  onAddTaskComment: (
+    taskId: string,
+    input: KavbanAddTaskCommentInput
+  ) => boolean;
+  onOpenTask: (taskId: string) => void;
   selectedInboxId: string;
   onSelectInbox: (id: string) => void;
   tasks: Task[];
 }) {
-  const selected = inboxItems.find((item) => item.id === selectedInboxId);
+  const [commandText, setCommandText] = useState('');
+  const [commandState, setCommandState] = useState('');
+  const [kindFilter, setKindFilter] = useState<'all' | KavbanInboxKind>('all');
+  const visibleInboxItems = useMemo(
+    () =>
+      kindFilter === 'all'
+        ? inboxItems
+        : inboxItems.filter((item) => item.kind === kindFilter),
+    [inboxItems, kindFilter]
+  );
+  const selected =
+    visibleInboxItems.find((item) => item.id === selectedInboxId) ??
+    visibleInboxItems[0];
   const task = tasks.find((item) => item.key === selected?.taskKey);
+  const SelectedIcon = selected ? inboxIconByKind[selected.kind] : ArchiveIcon;
+
+  useEffect(() => {
+    setCommandText('');
+    setCommandState('');
+  }, [selected?.id]);
+
+  const handleCommandSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!task || !commandText.trim()) {
+      setCommandState(task ? '' : 'No linked task');
+      return;
+    }
+
+    const saved = onAddTaskComment(task.id, { body: commandText });
+
+    if (saved) {
+      setCommandText('');
+      setCommandState('Added to task chat');
+    }
+  };
+  const saveQuickTriageNote = (body: string) => {
+    if (!task) {
+      setCommandState('No linked task');
+      return;
+    }
+
+    const saved = onAddTaskComment(task.id, { body });
+
+    if (saved) {
+      setCommandText('');
+      setCommandState('Added to task chat');
+    }
+  };
 
   return (
     <div className="grid h-full min-h-0 grid-cols-[minmax(320px,38%)_1fr]">
@@ -1108,8 +1179,32 @@ function InboxView({
             </>
           }
         />
+        <div className="border-b border-[#24262b] px-3 py-3">
+          <div className="flex gap-1 overflow-x-auto rounded-[8px] bg-[#191b1f] p-1">
+            {inboxFilterOptions.map((option) => {
+              const Icon = option.icon;
+
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => setKindFilter(option.id)}
+                  className={cn(
+                    'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[6px] px-2.5 text-xs font-semibold transition-colors',
+                    kindFilter === option.id
+                      ? 'bg-[#25272d] text-[#dce0e8]'
+                      : 'text-[#777d88] hover:text-[#cfd2dc]'
+                  )}
+                >
+                  <Icon className="size-3.5" weight="bold" />
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
         <div className="space-y-1 p-3">
-          {inboxItems.map((item) => {
+          {visibleInboxItems.map((item) => {
             const Icon = inboxIconByKind[item.kind];
 
             return (
@@ -1139,6 +1234,11 @@ function InboxView({
               </button>
             );
           })}
+          {visibleInboxItems.length === 0 && (
+            <div className="rounded-[8px] border border-[#24262b] bg-[#17181b] px-3 py-8 text-center text-sm text-[#858b96]">
+              No inbox items match this filter
+            </div>
+          )}
         </div>
       </section>
 
@@ -1149,8 +1249,11 @@ function InboxView({
         />
         <div className="mx-auto max-w-4xl px-8 py-10">
           <div className="mb-10">
-            <div className="mb-4 flex items-center gap-3">
+            <div className="mb-4 flex flex-wrap items-center gap-3">
               {task && <StatusIcon task={task} />}
+              <span className="flex size-8 items-center justify-center rounded-full border border-[#2d3036] bg-[#181a1e] text-[#bfc3cd]">
+                <SelectedIcon className="size-4" weight="bold" />
+              </span>
               <span className="font-ibm-plex-mono text-sm text-[#777d88]">
                 {selected?.taskKey}
               </span>
@@ -1165,6 +1268,16 @@ function InboxView({
               {task?.description ??
                 'A project notification is ready for triage.'}
             </p>
+            {task && (
+              <button
+                type="button"
+                onClick={() => onOpenTask(task.id)}
+                className="mt-5 inline-flex h-9 items-center gap-2 rounded-[6px] border border-[#2a2c31] bg-[#202227] px-3 text-xs font-semibold text-[#cfd2da] transition-colors hover:border-[#3a3d46]"
+              >
+                <ListChecksIcon className="size-4" weight="bold" />
+                Open task
+              </button>
+            )}
           </div>
 
           <div className="mb-10 rounded-[8px] border border-[#24262b] bg-[#17181b] p-5">
@@ -1211,16 +1324,70 @@ function InboxView({
             </div>
           </div>
 
-          <div className="rounded-[8px] border border-[#24262b] bg-[#15161a] p-4">
+          <form
+            className="rounded-[8px] border border-[#24262b] bg-[#15161a] p-4"
+            onSubmit={handleCommandSubmit}
+          >
+            {task && (
+              <div className="mb-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    saveQuickTriageNote('Inbox triage: acknowledged.')
+                  }
+                  className="inline-flex h-8 items-center gap-2 rounded-[6px] border border-[#2a2c31] bg-[#202227] px-3 text-xs font-semibold text-[#cfd2da] transition-colors hover:border-[#3a3d46]"
+                >
+                  <CheckCircleIcon className="size-3.5" weight="bold" />
+                  Acknowledge
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    saveQuickTriageNote(
+                      'Inbox triage: follow-up requested before the next agent run.'
+                    )
+                  }
+                  className="inline-flex h-8 items-center gap-2 rounded-[6px] border border-[#2a2c31] bg-[#202227] px-3 text-xs font-semibold text-[#cfd2da] transition-colors hover:border-[#3a3d46]"
+                >
+                  <ShieldCheckIcon className="size-3.5" weight="bold" />
+                  Follow up
+                </button>
+              </div>
+            )}
             <label className="sr-only" htmlFor="inbox-command">
               Tell Kavban what to do next
             </label>
             <textarea
               id="inbox-command"
+              value={commandText}
+              onChange={(event) => {
+                setCommandText(event.target.value);
+                setCommandState('');
+              }}
               className="h-24 w-full resize-none bg-transparent text-sm text-[#dce0e8] outline-none placeholder:text-[#626874]"
               placeholder="Tell Kavban what to do next..."
             />
-          </div>
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <span
+                className={cn(
+                  'text-xs font-semibold',
+                  commandState === 'Added to task chat'
+                    ? 'text-[#78d16d]'
+                    : 'text-[#f26d6d]'
+                )}
+              >
+                {commandState}
+              </span>
+              <button
+                type="submit"
+                disabled={!task || !commandText.trim()}
+                className="inline-flex h-8 items-center gap-2 rounded-[6px] border border-[#31553a] bg-[#172219] px-3 text-xs font-semibold text-[#78d16d] transition-colors hover:border-[#427049] disabled:cursor-not-allowed disabled:border-[#2a2c31] disabled:bg-transparent disabled:text-[#626874]"
+              >
+                <PencilSimpleIcon className="size-3.5" weight="bold" />
+                Add to task
+              </button>
+            </div>
+          </form>
         </div>
       </section>
     </div>
@@ -5724,6 +5891,13 @@ export function KavbanDashboard() {
           {activeSection === 'inbox' && (
             <InboxView
               inboxItems={inboxItems}
+              onAddTaskComment={addTaskComment}
+              onOpenTask={(taskId) => {
+                setSelectedTaskId(taskId);
+                setTaskView('list');
+                setProjectTab('tasks');
+                setActiveSection('workspace');
+              }}
               selectedInboxId={selectedInboxId}
               onSelectInbox={setSelectedInboxId}
               tasks={project.tasks}

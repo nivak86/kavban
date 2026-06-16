@@ -979,9 +979,11 @@ function QueueMonitor({
   activeRunTasks,
   aiReviewTasks,
   humanReviewTasks,
+  mergeReadyTasks,
   prReadyTasks,
   onDismissSummary,
   onCreateAiReview,
+  onMergeTask,
   onOpenTaskPullRequest,
   onRecordActiveRunCheck,
   onRecordHumanReview,
@@ -994,12 +996,14 @@ function QueueMonitor({
   activeRunTasks: Task[];
   aiReviewTasks: Task[];
   humanReviewTasks: Task[];
+  mergeReadyTasks: Task[];
   prReadyTasks: Task[];
   onDismissSummary: () => void;
   onCreateAiReview: (
     taskId: string,
     input?: KavbanCreateAiReviewInput
   ) => string | null;
+  onMergeTask: (taskId: string) => boolean;
   onOpenTaskPullRequest: (taskId: string) => string | null;
   onRecordActiveRunCheck: (
     taskId: string,
@@ -1019,6 +1023,7 @@ function QueueMonitor({
   const hasActiveRuns = activeRunTasks.length > 0;
   const hasAiReviewTasks = aiReviewTasks.length > 0;
   const hasHumanReviewTasks = humanReviewTasks.length > 0;
+  const hasMergeReadyTasks = mergeReadyTasks.length > 0;
   const hasPrReadyTasks = prReadyTasks.length > 0;
   const hasReadyItems = readyItems.length > 0;
   const stats = [
@@ -1057,6 +1062,11 @@ function QueueMonitor({
       value: prReadyTasks.length,
       tone: prReadyTasks.length > 0 ? 'text-[#58b957]' : 'text-[#777d88]',
     },
+    {
+      label: 'Merge ready',
+      value: mergeReadyTasks.length,
+      tone: mergeReadyTasks.length > 0 ? 'text-[#78d16d]' : 'text-[#777d88]',
+    },
   ];
 
   return (
@@ -1081,7 +1091,7 @@ function QueueMonitor({
               </button>
             )}
           </div>
-          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4 xl:grid-cols-7">
+          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4 xl:grid-cols-8">
             {stats.map((stat) => (
               <div
                 key={stat.label}
@@ -1374,11 +1384,57 @@ function QueueMonitor({
             </div>
           )}
 
+          {hasMergeReadyTasks && (
+            <div
+              className={cn(
+                (hasReadyItems ||
+                  hasActiveRuns ||
+                  hasAiReviewTasks ||
+                  hasHumanReviewTasks ||
+                  hasPrReadyTasks) &&
+                  'mt-2 border-t border-[#24262b] pt-2'
+              )}
+            >
+              <div className="mb-1 px-2 text-[11px] font-semibold text-[#777d88]">
+                Merge ready
+              </div>
+              <div className="space-y-1">
+                {mergeReadyTasks.slice(0, 4).map((task) => (
+                  <div
+                    key={task.id}
+                    className="grid min-h-10 w-full grid-cols-[72px_minmax(0,1fr)_auto_auto] items-center gap-2 rounded-[6px] px-2 text-xs transition-colors hover:bg-[#202227]"
+                  >
+                    <span className="font-ibm-plex-mono text-[#777d88]">
+                      {task.key}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => onSelectTask(task.id)}
+                      className="min-w-0 truncate text-left font-semibold text-[#cfd2da]"
+                    >
+                      {task.title}
+                    </button>
+                    {task.pr && <PrPill value={task.pr} />}
+                    <button
+                      type="button"
+                      aria-label={`Merge ${task.key} pull request`}
+                      onClick={() => onMergeTask(task.id)}
+                      className="flex size-6 shrink-0 items-center justify-center rounded-[5px] border border-[#31553a] bg-[#172219] text-[#78d16d] transition-colors hover:border-[#427049]"
+                    >
+                      <CheckCircleIcon className="size-3.5" weight="fill" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {!hasReadyItems &&
             !hasActiveRuns &&
             !hasAiReviewTasks &&
             !hasHumanReviewTasks &&
-            !hasPrReadyTasks && (
+            !hasPrReadyTasks &&
+            !hasMergeReadyTasks && (
             <div className="flex min-h-10 items-center gap-2 rounded-[6px] px-2 text-sm text-[#777d88]">
               <ClockIcon className="size-4" weight="bold" />
               No ready tasks queued
@@ -4589,6 +4645,16 @@ function WorkspaceTasks({
       ),
     [tasks]
   );
+  const mergeReadyTasks = useMemo(
+    () =>
+      tasks.filter(
+        (task) =>
+          task.status === 'pr-created' &&
+          task.approvalStatus === 'approved' &&
+          Boolean(task.pr)
+      ),
+    [tasks]
+  );
 
   const openCreateTask = (status: TaskStatus = 'backlog') => {
     setTaskCreateStatus(status);
@@ -4775,9 +4841,11 @@ function WorkspaceTasks({
           activeRunTasks={activeRunTasks}
           aiReviewTasks={aiReviewTasks}
           humanReviewTasks={humanReviewTasks}
+          mergeReadyTasks={mergeReadyTasks}
           prReadyTasks={prReadyTasks}
           onDismissSummary={() => setQueueSummary('')}
           onCreateAiReview={onCreateAiReview}
+          onMergeTask={onMergeTask}
           onOpenTaskPullRequest={onOpenTaskPullRequest}
           onRecordActiveRunCheck={(taskId, runId, status) =>
             onRecordRunCheck(taskId, runId, {

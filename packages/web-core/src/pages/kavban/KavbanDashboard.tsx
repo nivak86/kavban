@@ -1833,6 +1833,7 @@ function TaskDetailPanel({
   onCreateAiReview,
   onDeleteTask,
   onMoveTask,
+  onOpenTaskPullRequest,
   onRecordHumanReview,
   onRecordRunCheck,
   onStartAgentRun,
@@ -1844,6 +1845,7 @@ function TaskDetailPanel({
   onCreateAiReview: (taskId: string) => string | null;
   onDeleteTask: (taskId: string) => boolean;
   onMoveTask: (taskId: string, status: TaskStatus) => boolean;
+  onOpenTaskPullRequest: (taskId: string) => string | null;
   onRecordHumanReview: (
     taskId: string,
     input: KavbanRecordHumanReviewInput
@@ -1995,6 +1997,17 @@ function TaskDetailPanel({
           </button>
         )}
 
+        {!task.pr && (
+          <button
+            type="button"
+            onClick={() => onOpenTaskPullRequest(task.id)}
+            className="flex h-9 w-full items-center justify-center gap-2 rounded-[6px] border border-[#31553a] bg-[#172219] px-3 text-xs font-semibold text-[#78d16d] transition-colors hover:border-[#427049]"
+          >
+            <GitPullRequestIcon className="size-4" weight="bold" />
+            Open draft PR
+          </button>
+        )}
+
         {task.status === 'human-review' && (
           <div className="grid grid-cols-2 gap-2">
             <button
@@ -2057,6 +2070,7 @@ function TaskDetailPanel({
             ['Agent', getTaskAgent(task).name],
             ['Reviewer', getTaskReviewer(task).name],
             ['Branch', task.branch ?? 'Not planned'],
+            ['PR', task.pr ?? 'Not opened'],
             ['Tests', task.testStatus ?? 'Not run'],
             ['Review', task.reviewStatus ?? 'Not reviewed'],
             ['Approval', task.approvalStatus ?? 'Not requested'],
@@ -2188,6 +2202,7 @@ function WorkspaceTasks({
   onCreateTask,
   onDeleteTask,
   onMoveTask,
+  onOpenTaskPullRequest,
   onRecordHumanReview,
   onRecordRunCheck,
   onStartAgentRun,
@@ -2205,6 +2220,7 @@ function WorkspaceTasks({
   onCreateTask: (input: KavbanCreateTaskInput) => string | null;
   onDeleteTask: (taskId: string) => boolean;
   onMoveTask: (taskId: string, status: TaskStatus) => boolean;
+  onOpenTaskPullRequest: (taskId: string) => string | null;
   onRecordHumanReview: (
     taskId: string,
     input: KavbanRecordHumanReviewInput
@@ -2352,6 +2368,7 @@ function WorkspaceTasks({
           onCreateAiReview={onCreateAiReview}
           onDeleteTask={handleDeleteTask}
           onMoveTask={onMoveTask}
+          onOpenTaskPullRequest={onOpenTaskPullRequest}
           onRecordHumanReview={onRecordHumanReview}
           onRecordRunCheck={onRecordRunCheck}
           onStartAgentRun={onStartAgentRun}
@@ -3059,6 +3076,7 @@ function WorkspaceView({
   onDeleteTask,
   onMoveTask,
   onProjectTabChange,
+  onOpenTaskPullRequest,
   onRecordHumanReview,
   onRecordRunCheck,
   onRepositoryChange,
@@ -3087,6 +3105,7 @@ function WorkspaceView({
   onDeleteTask: (taskId: string) => boolean;
   onMoveTask: (taskId: string, status: TaskStatus) => boolean;
   onProjectTabChange: (tab: ProjectTab) => void;
+  onOpenTaskPullRequest: (taskId: string) => string | null;
   onRecordHumanReview: (
     taskId: string,
     input: KavbanRecordHumanReviewInput
@@ -3145,6 +3164,7 @@ function WorkspaceView({
             onCreateTask={onCreateTask}
             onDeleteTask={onDeleteTask}
             onMoveTask={onMoveTask}
+            onOpenTaskPullRequest={onOpenTaskPullRequest}
             onRecordHumanReview={onRecordHumanReview}
             onRecordRunCheck={onRecordRunCheck}
             onStartAgentRun={onStartAgentRun}
@@ -3279,6 +3299,7 @@ export function KavbanDashboard() {
     deleteTask,
     inboxItems,
     moveTask,
+    openTaskPullRequest,
     profile,
     project,
     projects,
@@ -3359,6 +3380,7 @@ export function KavbanDashboard() {
               onDeleteContextFile={deleteContextFile}
               onDeleteTask={deleteTask}
               onMoveTask={moveTask}
+              onOpenTaskPullRequest={openTaskPullRequest}
               onProjectTabChange={setProjectTab}
               onRecordHumanReview={recordHumanReview}
               onRecordRunCheck={recordAgentRunCheck}

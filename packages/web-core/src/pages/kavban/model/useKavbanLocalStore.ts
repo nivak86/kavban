@@ -140,6 +140,14 @@ function createTaskBranch(taskId: string, title: string) {
   return `kav/${taskId}-${createBranchSlug(title)}`;
 }
 
+function getTaskNumber(task: KavbanTask) {
+  return Number(task.key.match(/^KAV-(\d+)$/)?.[1]) || 0;
+}
+
+function createTaskPrNumber(task: KavbanTask) {
+  return `#${55000 + getTaskNumber(task)}`;
+}
+
 function getTaskDependency(
   dependency: string,
   tasks: KavbanTask[]
@@ -998,6 +1006,55 @@ export function useKavbanLocalStore() {
     [activeProject.tasks]
   );
 
+  const openTaskPullRequest = useCallback(
+    (taskId: string) => {
+      const taskToOpen = activeProject.tasks.find((task) => task.id === taskId);
+
+      if (!taskToOpen) {
+        return null;
+      }
+
+      const updatedAt = nowIso();
+      const branch =
+        taskToOpen.branch || createTaskBranch(taskToOpen.id, taskToOpen.title);
+      const pr = taskToOpen.pr || createTaskPrNumber(taskToOpen);
+
+      setState((current) => ({
+        ...current,
+        projects: current.projects.map((project) =>
+          project.id === current.activeProjectId
+            ? {
+                ...project,
+                tasks: project.tasks.map((task) =>
+                  task.id === taskId
+                    ? {
+                        ...task,
+                        branch,
+                        pr,
+                        events: [
+                          ...task.events,
+                          {
+                            id: `evt-${taskId}-pr-${Date.now().toString(36)}`,
+                            kind: 'pr-opened',
+                            actor: 'github',
+                            summary: `Draft PR ${pr} opened from ${branch}.`,
+                            createdAt: updatedAt,
+                          },
+                        ],
+                      }
+                    : task
+                ),
+              }
+            : project
+        ),
+        updatedAt,
+      }));
+
+      return pr;
+    },
+    [activeProject.tasks]
+  );
+
   const moveTask = useCallback(
     (taskId: string, status: KavbanTaskStatus) => {
       const taskToMove = activeProject.tasks.find((task) => task.id === taskId);
@@ -1082,6 +1139,7 @@ export function useKavbanLocalStore() {
     profile: state.profile,
     project: activeProjectWithDefaults,
     projects: state.projects,
+    openTaskPullRequest,
     recordAgentRunCheck,
     recordHumanReview,
     selectProject,

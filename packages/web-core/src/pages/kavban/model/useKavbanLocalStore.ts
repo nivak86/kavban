@@ -25,6 +25,7 @@ export type KavbanCreateTaskInput = {
   priority: KavbanTaskPriority;
   agentId: KavbanAgentId;
   reviewerId: KavbanAgentId;
+  requiresHumanReview: boolean;
   tagLabels: string[];
   dependencies: string[];
   contextFiles: string[];
@@ -214,6 +215,7 @@ function createTaskFromInput(
     priority: input.priority,
     agentId: input.agentId,
     reviewerId: input.reviewerId,
+    requiresHumanReview: input.requiresHumanReview,
     tags: tagLabels.map((label, index) => ({
       label,
       color: tagColors[index % tagColors.length],
@@ -536,6 +538,8 @@ export function useKavbanLocalStore() {
                         priority: normalizedInput.priority,
                         agentId: normalizedInput.agentId,
                         reviewerId: normalizedInput.reviewerId,
+                        requiresHumanReview:
+                          normalizedInput.requiresHumanReview,
                         dependencies: normalizedInput.dependencies,
                         tags: (normalizedInput.tagLabels.length > 0
                           ? normalizedInput.tagLabels

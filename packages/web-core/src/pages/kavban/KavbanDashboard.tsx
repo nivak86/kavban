@@ -184,6 +184,15 @@ function PrPill({ value }: { value: string }) {
   );
 }
 
+function HumanReviewPill() {
+  return (
+    <span className="inline-flex h-6 items-center gap-1.5 rounded-[5px] border border-[#3b334f] bg-[#1f1b2a] px-2 text-xs font-medium text-[#d6cdfd]">
+      <ShieldCheckIcon className="size-3.5" weight="bold" />
+      Human
+    </span>
+  );
+}
+
 function BlockedPill({ count }: { count: number }) {
   return (
     <span className="inline-flex h-6 items-center gap-1.5 rounded-[5px] border border-[#553131] bg-[#25191b] px-2 text-xs font-medium text-[#f26d6d]">
@@ -764,6 +773,7 @@ function WorkspaceHome({
 function TaskCreatePanel({
   contextFiles,
   defaultAgentId,
+  defaultHumanReviewRequired,
   defaultReviewerId,
   defaultStatus,
   dependencyTasks,
@@ -772,6 +782,7 @@ function TaskCreatePanel({
 }: {
   contextFiles: Project['contextFiles'];
   defaultAgentId: KavbanAgentId;
+  defaultHumanReviewRequired: boolean;
   defaultReviewerId: KavbanAgentId;
   defaultStatus: TaskStatus;
   dependencyTasks: Task[];
@@ -789,6 +800,9 @@ function TaskCreatePanel({
   const [agentId, setAgentId] = useState<KavbanAgentId>(defaultAgentId);
   const [reviewerId, setReviewerId] =
     useState<KavbanAgentId>(defaultReviewerId);
+  const [requiresHumanReview, setRequiresHumanReview] = useState(
+    defaultHumanReviewRequired
+  );
   const [tagText, setTagText] = useState('');
   const [selectedContextFiles, setSelectedContextFiles] =
     useState(defaultContextFiles);
@@ -800,8 +814,15 @@ function TaskCreatePanel({
     setStatus(defaultStatus);
     setAgentId(defaultAgentId);
     setReviewerId(defaultReviewerId);
+    setRequiresHumanReview(defaultHumanReviewRequired);
     setSelectedContextFiles(defaultContextFiles);
-  }, [defaultAgentId, defaultContextFiles, defaultReviewerId, defaultStatus]);
+  }, [
+    defaultAgentId,
+    defaultContextFiles,
+    defaultHumanReviewRequired,
+    defaultReviewerId,
+    defaultStatus,
+  ]);
 
   const toggleContextFile = (path: string) => {
     setSelectedContextFiles((current) =>
@@ -832,6 +853,7 @@ function TaskCreatePanel({
           priority,
           agentId,
           reviewerId,
+          requiresHumanReview,
           tagLabels: tagText.split(','),
           dependencies: selectedDependencies,
           contextFiles: selectedContextFiles,
@@ -991,6 +1013,17 @@ function TaskCreatePanel({
             </div>
           </div>
 
+          <label className="flex items-center gap-3 rounded-[7px] border border-[#24262b] bg-[#17181b] px-3 py-2 text-sm font-semibold text-[#cfd2da]">
+            <input
+              type="checkbox"
+              checked={requiresHumanReview}
+              onChange={(event) => setRequiresHumanReview(event.target.checked)}
+              className="size-4 accent-[#6aa7ff]"
+            />
+            <ShieldCheckIcon className="size-4 text-[#858b96]" weight="bold" />
+            Require human review
+          </label>
+
           <div>
             <p className="mb-2 text-xs font-semibold text-[#777d88]">Context</p>
             <div className="flex flex-wrap gap-2">
@@ -1126,6 +1159,7 @@ function TaskCard({
         {blockingDependencies.length > 0 && (
           <BlockedPill count={blockingDependencies.length} />
         )}
+        {task.requiresHumanReview !== false && <HumanReviewPill />}
         {task.pr && <PrPill value={task.pr} />}
       </div>
     </button>
@@ -1242,6 +1276,7 @@ function TasksList({
                 {blockingDependencies.length > 0 && (
                   <BlockedPill count={blockingDependencies.length} />
                 )}
+                {task.requiresHumanReview !== false && <HumanReviewPill />}
                 {task.tags.slice(0, 2).map((tag) => (
                   <TagPill key={tag.label} tag={tag} />
                 ))}
@@ -1274,6 +1309,9 @@ function TaskEditForm({
   const [priority, setPriority] = useState<KavbanTaskPriority>(task.priority);
   const [agentId, setAgentId] = useState<KavbanAgentId>(task.agentId);
   const [reviewerId, setReviewerId] = useState<KavbanAgentId>(task.reviewerId);
+  const [requiresHumanReview, setRequiresHumanReview] = useState(
+    task.requiresHumanReview ?? true
+  );
   const [tagText, setTagText] = useState(
     task.tags.map((tag) => tag.label).join(', ')
   );
@@ -1291,6 +1329,7 @@ function TaskEditForm({
     setPriority(task.priority);
     setAgentId(task.agentId);
     setReviewerId(task.reviewerId);
+    setRequiresHumanReview(task.requiresHumanReview ?? true);
     setTagText(task.tags.map((tag) => tag.label).join(', '));
     setSelectedContextFiles(task.contextFiles);
     setSelectedDependencies(task.dependencies);
@@ -1325,6 +1364,7 @@ function TaskEditForm({
           priority,
           agentId,
           reviewerId,
+          requiresHumanReview,
           tagLabels: tagText.split(','),
           dependencies: selectedDependencies,
           contextFiles: selectedContextFiles,
@@ -1456,6 +1496,17 @@ function TaskEditForm({
           </select>
         </div>
       </div>
+
+      <label className="flex items-center gap-3 rounded-[7px] border border-[#24262b] bg-[#111214] px-3 py-2 text-sm font-semibold text-[#cfd2da]">
+        <input
+          type="checkbox"
+          checked={requiresHumanReview}
+          onChange={(event) => setRequiresHumanReview(event.target.checked)}
+          className="size-4 accent-[#6aa7ff]"
+        />
+        <ShieldCheckIcon className="size-4 text-[#858b96]" weight="bold" />
+        Require human review
+      </label>
 
       <div>
         <label
@@ -1697,6 +1748,10 @@ function TaskDetailPanel({
             ['Priority', task.priority],
             ['Agent', getTaskAgent(task).name],
             ['Reviewer', getTaskReviewer(task).name],
+            [
+              'Human review',
+              task.requiresHumanReview === false ? 'Optional' : 'Required',
+            ],
           ].map(([label, value]) => (
             <div
               key={label}
@@ -1877,6 +1932,7 @@ function WorkspaceTasks({
           <TaskCreatePanel
             contextFiles={contextFiles}
             defaultAgentId={agentRouting.defaultAgentId}
+            defaultHumanReviewRequired={agentRouting.humanReviewRequired}
             defaultReviewerId={agentRouting.reviewerAgentId}
             defaultStatus={taskCreateStatus}
             dependencyTasks={tasks}

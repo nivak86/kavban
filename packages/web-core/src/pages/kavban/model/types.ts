@@ -85,6 +85,7 @@ export type KavbanTask = {
   priority: KavbanTaskPriority;
   agentId: KavbanAgentId;
   reviewerId: KavbanAgentId;
+  requiresHumanReview?: boolean;
   branch?: string;
   pr?: string;
   tags: KavbanTag[];

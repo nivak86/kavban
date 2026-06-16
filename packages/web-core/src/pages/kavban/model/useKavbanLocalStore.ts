@@ -14,6 +14,7 @@ import type {
   KavbanConnector,
   KavbanConnectorId,
   KavbanContextFile,
+  KavbanProfile,
   KavbanProject,
   KavbanReviewStatus,
   KavbanTask,
@@ -80,6 +81,15 @@ export type KavbanRepositoryInput = {
 };
 
 export type KavbanAgentRoutingInput = KavbanAgentRouting;
+
+export type KavbanProfileInput = Pick<
+  KavbanProfile,
+  | 'defaultAgentId'
+  | 'displayName'
+  | 'humanGate'
+  | 'reviewerAgentId'
+  | 'role'
+>;
 
 const taskStateByStatus: Record<KavbanTaskStatus, string> = {
   backlog: 'Draft',
@@ -1685,6 +1695,37 @@ export function useKavbanLocalStore() {
     []
   );
 
+  const updateProfile = useCallback((input: KavbanProfileInput) => {
+    const displayName = input.displayName.trim();
+    const role = input.role.trim();
+    const humanGate = input.humanGate.trim();
+
+    if (
+      !displayName ||
+      !role ||
+      !humanGate ||
+      !workerAgentIds.includes(input.defaultAgentId) ||
+      !reviewerAgentIds.includes(input.reviewerAgentId)
+    ) {
+      return false;
+    }
+
+    setState((current) => ({
+      ...current,
+      profile: {
+        ...current.profile,
+        defaultAgentId: input.defaultAgentId,
+        displayName,
+        humanGate,
+        reviewerAgentId: input.reviewerAgentId,
+        role,
+      },
+      updatedAt: nowIso(),
+    }));
+
+    return true;
+  }, []);
+
   return {
     activeProjectId: state.activeProjectId,
     addTaskComment,
@@ -1711,6 +1752,7 @@ export function useKavbanLocalStore() {
     updateAgentRouting,
     updateConnector,
     updateContextFile,
+    updateProfile,
     updateProjectBrief,
     updateProjectRepository,
     updateTask,

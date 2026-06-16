@@ -60,6 +60,7 @@ import type {
   KavbanInboxKind,
   KavbanInboxItem as InboxItem,
   KavbanProfile as Profile,
+  KavbanProfileInput,
   KavbanProject as Project,
   KavbanRecordRunCheckInput,
   KavbanRecordHumanReviewInput,
@@ -4004,12 +4005,52 @@ function SettingsView() {
   );
 }
 
-function ProfileView({ profile }: { profile: Profile }) {
+function ProfileView({
+  onProfileChange,
+  profile,
+}: {
+  onProfileChange: (input: KavbanProfileInput) => boolean;
+  profile: Profile;
+}) {
+  const [displayName, setDisplayName] = useState(profile.displayName);
+  const [role, setRole] = useState(profile.role);
+  const [defaultAgentId, setDefaultAgentId] = useState<KavbanAgentId>(
+    profile.defaultAgentId
+  );
+  const [reviewerAgentId, setReviewerAgentId] = useState<KavbanAgentId>(
+    profile.reviewerAgentId
+  );
+  const [humanGate, setHumanGate] = useState(profile.humanGate);
+  const [saveState, setSaveState] = useState('');
+
+  useEffect(() => {
+    setDisplayName(profile.displayName);
+    setRole(profile.role);
+    setDefaultAgentId(profile.defaultAgentId);
+    setReviewerAgentId(profile.reviewerAgentId);
+    setHumanGate(profile.humanGate);
+  }, [profile]);
+
   return (
     <div className="h-full overflow-y-auto bg-[#101113]">
       <TopBar title={getProfileFirstName(profile)} eyebrow="Profile" />
       <div className="mx-auto max-w-4xl px-6 py-7">
-        <section className="rounded-[8px] border border-[#24262b] bg-[#17181b] p-5">
+        <form
+          className="rounded-[8px] border border-[#24262b] bg-[#17181b] p-5"
+          onSubmit={(event) => {
+            event.preventDefault();
+
+            const saved = onProfileChange({
+              defaultAgentId,
+              displayName,
+              humanGate,
+              reviewerAgentId,
+              role,
+            });
+
+            setSaveState(saved ? 'Saved' : 'Check required fields');
+          }}
+        >
           <div className="mb-6 flex items-center gap-4">
             <span className="flex size-12 items-center justify-center rounded-full border border-[#353841] bg-[#202227]">
               <UserCircleIcon className="size-7 text-[#cfd2da]" weight="bold" />
@@ -4039,7 +4080,116 @@ function ProfileView({ profile }: { profile: Profile }) {
               </div>
             ))}
           </div>
-        </section>
+
+          <div className="mt-6 grid gap-4 md:grid-cols-2">
+            <label className="block" htmlFor="profile-display-name">
+              <span className="mb-1.5 block text-xs font-semibold text-[#777d88]">
+                Display name
+              </span>
+              <input
+                id="profile-display-name"
+                value={displayName}
+                onChange={(event) => {
+                  setDisplayName(event.target.value);
+                  setSaveState('');
+                }}
+                className={`${taskFormFieldClass} h-9`}
+              />
+            </label>
+
+            <label className="block" htmlFor="profile-role">
+              <span className="mb-1.5 block text-xs font-semibold text-[#777d88]">
+                Role
+              </span>
+              <input
+                id="profile-role"
+                value={role}
+                onChange={(event) => {
+                  setRole(event.target.value);
+                  setSaveState('');
+                }}
+                className={`${taskFormFieldClass} h-9`}
+              />
+            </label>
+
+            <label className="block" htmlFor="profile-default-worker">
+              <span className="mb-1.5 block text-xs font-semibold text-[#777d88]">
+                Default worker
+              </span>
+              <select
+                id="profile-default-worker"
+                value={defaultAgentId}
+                onChange={(event) => {
+                  setDefaultAgentId(event.target.value as KavbanAgentId);
+                  setSaveState('');
+                }}
+                className={`${taskFormFieldClass} h-9`}
+              >
+                {agentOptions.map((item) => (
+                  <option key={item} value={item}>
+                    {kavbanAgents[item].name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block" htmlFor="profile-reviewer">
+              <span className="mb-1.5 block text-xs font-semibold text-[#777d88]">
+                Reviewer
+              </span>
+              <select
+                id="profile-reviewer"
+                value={reviewerAgentId}
+                onChange={(event) => {
+                  setReviewerAgentId(event.target.value as KavbanAgentId);
+                  setSaveState('');
+                }}
+                className={`${taskFormFieldClass} h-9`}
+              >
+                {reviewerOptions.map((item) => (
+                  <option key={item} value={item}>
+                    {kavbanAgents[item].name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block md:col-span-2" htmlFor="profile-human-gate">
+              <span className="mb-1.5 block text-xs font-semibold text-[#777d88]">
+                Human gate
+              </span>
+              <input
+                id="profile-human-gate"
+                value={humanGate}
+                onChange={(event) => {
+                  setHumanGate(event.target.value);
+                  setSaveState('');
+                }}
+                className={`${taskFormFieldClass} h-9`}
+              />
+            </label>
+          </div>
+
+          <div className="mt-5 flex items-center justify-end gap-3">
+            {saveState && (
+              <span
+                className={cn(
+                  'text-xs font-semibold',
+                  saveState === 'Saved' ? 'text-[#78d16d]' : 'text-[#f26d6d]'
+                )}
+              >
+                {saveState}
+              </span>
+            )}
+            <button
+              type="submit"
+              className="flex h-9 items-center gap-2 rounded-[6px] border border-[#31553a] bg-[#172219] px-3 text-xs font-semibold text-[#78d16d] transition-colors hover:border-[#427049]"
+            >
+              <CheckCircleIcon className="size-4" weight="bold" />
+              Save profile
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
@@ -4071,6 +4221,7 @@ export function KavbanDashboard() {
     updateAgentRouting,
     updateConnector,
     updateContextFile,
+    updateProfile,
     updateProjectBrief,
     updateProjectRepository,
     updateTask,
@@ -4165,7 +4316,12 @@ export function KavbanDashboard() {
             />
           )}
           {activeSection === 'settings' && <SettingsView />}
-          {activeSection === 'profile' && <ProfileView profile={profile} />}
+          {activeSection === 'profile' && (
+            <ProfileView
+              onProfileChange={updateProfile}
+              profile={profile}
+            />
+          )}
         </main>
       </div>
     </div>

@@ -275,6 +275,49 @@ const getMissingTaskContextFiles = (
 
   return runContextFiles.filter((path) => !projectContextPaths.has(path));
 };
+type TaskBlockerSummary = {
+  count: number;
+  title: string;
+};
+const getTaskBlockerSummary = (
+  task: Task,
+  projectTasks: Task[],
+  connectors: Record<ConnectorId, Connector>,
+  contextFiles: Project['contextFiles']
+): TaskBlockerSummary | null => {
+  if (task.status !== 'ready') {
+    return null;
+  }
+
+  const blockingDependencies = getBlockingDependencies(task, projectTasks);
+  const missingConnectors = getMissingTaskRunConnectors(connectors, task);
+  const missingContextFiles = getMissingTaskContextFiles(contextFiles, task);
+  const blockerLines = [
+    blockingDependencies.length > 0
+      ? `${blockingDependencies.length} incomplete dependenc${blockingDependencies.length === 1 ? 'y' : 'ies'}`
+      : '',
+    missingConnectors.length > 0
+      ? `${missingConnectors.length} missing connector${missingConnectors.length === 1 ? '' : 's'}: ${missingConnectors.map((connector) => connector.name).join(', ')}`
+      : '',
+    missingContextFiles.length > 0
+      ? `${missingContextFiles.length} missing context file${missingContextFiles.length === 1 ? '' : 's'}: ${missingContextFiles.join(', ')}`
+      : '',
+    task.lockedBy ? 'Task is already locked by an agent' : '',
+  ].filter(Boolean);
+
+  if (blockerLines.length === 0) {
+    return null;
+  }
+
+  return {
+    count:
+      blockingDependencies.length +
+      missingConnectors.length +
+      missingContextFiles.length +
+      (task.lockedBy ? 1 : 0),
+    title: blockerLines.join('\n'),
+  };
+};
 
 function StatusIcon({ task }: { task: Task }) {
   const column = workflowColumns.find((item) => item.id === task.status);
@@ -733,11 +776,14 @@ function AgentRunCard({
   );
 }
 
-function BlockedPill({ count }: { count: number }) {
+function WaitingPill({ summary }: { summary: TaskBlockerSummary }) {
   return (
-    <span className="inline-flex h-6 items-center gap-1.5 rounded-[5px] border border-[#553131] bg-[#25191b] px-2 text-xs font-medium text-[#f26d6d]">
-      <ShieldCheckIcon className="size-3.5" weight="bold" />
-      Blocked {count}
+    <span
+      className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-[5px] border border-[#5b4a22] bg-[#241f15] px-2 text-xs font-medium text-[#f2d14b]"
+      title={summary.title}
+    >
+      <ClockIcon className="size-3.5" weight="bold" />
+      Waiting {summary.count}
     </span>
   );
 }
@@ -1796,10 +1842,12 @@ function TaskImportPanel({
 }
 
 function TaskCard({
+  blockerSummary,
   task,
   selected,
   onSelect,
 }: {
+  blockerSummary: TaskBlockerSummary | null;
   task: Task;
   selected: boolean;
   onSelect: () => void;
@@ -1835,6 +1883,7 @@ function TaskCard({
         <span className="inline-flex size-8 items-center justify-center rounded-[5px] bg-[#282a2f] text-[#6f7682]">
           <ChartBarIcon className="size-4" weight="bold" />
         </span>
+        {blockerSummary && <WaitingPill summary={blockerSummary} />}
         <LockPill task={task} />
         {task.tags.slice(0, 2).map((tag) => (
           <TagPill key={tag.label} tag={tag} />
@@ -1846,12 +1895,18 @@ function TaskCard({
 }
 
 function TasksBoard({
+  connectors,
+  contextFiles,
   onCreateTask,
+  projectTasks,
   selectedTaskId,
   onSelectTask,
   tasks,
 }: {
+  connectors: Record<ConnectorId, Connector>;
+  contextFiles: Project['contextFiles'];
   onCreateTask: (status: TaskStatus) => void;
+  projectTasks: Task[];
   selectedTaskId: string;
   onSelectTask: (id: string) => void;
   tasks: Task[];
@@ -1913,14 +1968,24 @@ function TasksBoard({
                 </div>
               </div>
               <div className="space-y-3.5">
-                {columnTasks.map((task) => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    selected={task.id === selectedTaskId}
-                    onSelect={() => onSelectTask(task.id)}
-                  />
-                ))}
+                {columnTasks.map((task) => {
+                  const blockerSummary = getTaskBlockerSummary(
+                    task,
+                    projectTasks,
+                    connectors,
+                    contextFiles
+                  );
+
+                  return (
+                    <TaskCard
+                      key={task.id}
+                      blockerSummary={blockerSummary}
+                      task={task}
+                      selected={task.id === selectedTaskId}
+                      onSelect={() => onSelectTask(task.id)}
+                    />
+                  );
+                })}
               </div>
             </section>
           );
@@ -1931,10 +1996,16 @@ function TasksBoard({
 }
 
 function TasksList({
+  connectors,
+  contextFiles,
+  projectTasks,
   selectedTaskId,
   onSelectTask,
   tasks,
 }: {
+  connectors: Record<ConnectorId, Connector>;
+  contextFiles: Project['contextFiles'];
+  projectTasks: Task[];
   selectedTaskId: string;
   onSelectTask: (id: string) => void;
   tasks: Task[];
@@ -1943,7 +2014,12 @@ function TasksList({
     <div className="min-w-[980px] px-6 py-7">
       <div className="space-y-1">
         {tasks.map((task) => {
-          const blockingDependencies = getBlockingDependencies(task, tasks);
+          const blockerSummary = getTaskBlockerSummary(
+            task,
+            projectTasks,
+            connectors,
+            contextFiles
+          );
 
           return (
             <button
@@ -1966,9 +2042,7 @@ function TasksList({
               </span>
               <span className="flex items-center justify-end gap-2">
                 {task.branch && <BranchPill value={task.branch} />}
-                {blockingDependencies.length > 0 && (
-                  <BlockedPill count={blockingDependencies.length} />
-                )}
+                {blockerSummary && <WaitingPill summary={blockerSummary} />}
                 <LockPill task={task} />
                 <TestStatusPill status={task.testStatus} />
                 <ReviewStatusPill status={task.reviewStatus} />
@@ -3734,13 +3808,19 @@ function WorkspaceTasks({
           </div>
         ) : taskView === 'board' ? (
           <TasksBoard
+            connectors={connectors}
+            contextFiles={contextFiles}
             onCreateTask={openCreateTask}
+            projectTasks={tasks}
             selectedTaskId={selectedTaskId}
             onSelectTask={onSelectTask}
             tasks={filteredTasks}
           />
         ) : (
           <TasksList
+            connectors={connectors}
+            contextFiles={contextFiles}
+            projectTasks={tasks}
             selectedTaskId={selectedTaskId}
             onSelectTask={onSelectTask}
             tasks={filteredTasks}

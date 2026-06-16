@@ -1311,29 +1311,25 @@ function TaskCreatePanel({
 }
 
 function TaskCard({
-  projectTasks,
   task,
   selected,
   onSelect,
 }: {
-  projectTasks: Task[];
   task: Task;
   selected: boolean;
   onSelect: () => void;
 }) {
-  const blockingDependencies = getBlockingDependencies(task, projectTasks);
-
   return (
     <button
       type="button"
       onClick={onSelect}
       className={cn(
-        'group w-full rounded-[8px] border bg-[#1b1d20] p-4 text-left shadow-[0_8px_22px_rgba(0,0,0,0.18)] transition-colors hover:border-[#343741]',
-        selected ? 'border-[#444956]' : 'border-[#24262b]'
+        'group relative h-[148px] w-full overflow-hidden rounded-[8px] border bg-[#1b1d20] p-4 text-left shadow-[0_8px_22px_rgba(0,0,0,0.18)] transition-colors hover:border-[#343741]',
+        selected ? 'border-[#3b3f49]' : 'border-[#24262b]'
       )}
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
+        <div className="min-w-0 pr-28">
           <p className="font-ibm-plex-mono text-xs text-[#6f7682]">
             {task.key}
           </p>
@@ -1344,26 +1340,19 @@ function TaskCard({
             </h3>
           </div>
         </div>
-        <span className="inline-flex h-7 items-center gap-1.5 rounded-full border border-[#2a2c31] bg-[#17181b] px-2.5 text-xs font-medium text-[#9ca1ad]">
-          {task.state}
+        <span className="absolute right-4 top-4 inline-flex h-7 max-w-[142px] items-center gap-1.5 rounded-full border border-[#2a2c31] bg-[#17181b] px-2.5 text-xs font-medium text-[#9ca1ad]">
+          <span className="truncate">{task.state}</span>
           <AgentAvatar agent={getTaskAgent(task)} />
         </span>
       </div>
 
-      <div className="mt-7 flex flex-wrap items-center gap-1.5">
+      <div className="absolute bottom-4 left-4 right-4 flex min-w-0 items-center gap-1.5 overflow-hidden">
         <span className="inline-flex size-6 items-center justify-center rounded-[5px] bg-[#282a2f] text-[#6f7682]">
           <ChartBarIcon className="size-4" weight="bold" />
         </span>
-        {task.branch && <BranchPill value={task.branch} />}
         {task.tags.slice(0, 2).map((tag) => (
           <TagPill key={tag.label} tag={tag} />
         ))}
-        {blockingDependencies.length > 0 && (
-          <BlockedPill count={blockingDependencies.length} />
-        )}
-        <TestStatusPill status={task.testStatus} />
-        <ReviewStatusPill status={task.reviewStatus} />
-        {task.requiresHumanReview !== false && <HumanReviewPill />}
         {task.pr && <PrPill value={task.pr} />}
       </div>
     </button>
@@ -1394,8 +1383,8 @@ function TasksBoard({
   );
 
   return (
-    <div className="min-w-[1320px] px-6 py-7">
-      <div className="grid grid-cols-6 gap-4">
+    <div className="w-max min-w-full px-6 py-7">
+      <div className="grid grid-flow-col auto-cols-[500px] gap-4">
         {workflowColumns.map((column) => {
           const Icon = workflowIconByKey[column.iconKey];
           const columnTasks = tasksByStatus[column.id];
@@ -1416,17 +1405,22 @@ function TasksBoard({
                     {columnTasks.length}
                   </span>
                 </div>
-                <IconButton
-                  label={`Add task to ${column.label}`}
-                  icon={PlusIcon}
-                  onClick={() => onCreateTask(column.id)}
-                />
+                <div className="flex items-center gap-1">
+                  <IconButton
+                    label={`Add task to ${column.label}`}
+                    icon={PlusIcon}
+                    onClick={() => onCreateTask(column.id)}
+                  />
+                  <IconButton
+                    label={`${column.label} options`}
+                    icon={DotsThreeIcon}
+                  />
+                </div>
               </div>
               <div className="space-y-3">
                 {columnTasks.map((task) => (
                   <TaskCard
                     key={task.id}
-                    projectTasks={tasks}
                     task={task}
                     selected={task.id === selectedTaskId}
                     onSelect={() => onSelectTask(task.id)}
@@ -2309,7 +2303,7 @@ function WorkspaceTasks({
           />
         )}
       </main>
-      {selectedTask && (
+      {selectedTask && taskView === 'list' && (
         <TaskDetailPanel
           contextFiles={contextFiles}
           onCreateAiReview={onCreateAiReview}

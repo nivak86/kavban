@@ -26,6 +26,7 @@ export type KavbanCreateTaskInput = {
   agentId: KavbanAgentId;
   reviewerId: KavbanAgentId;
   requiresHumanReview: boolean;
+  branch?: string;
   tagLabels: string[];
   dependencies: string[];
   contextFiles: string[];
@@ -114,6 +115,14 @@ function getNextTaskNumber(tasks: KavbanTask[]) {
   }, 120);
 
   return highestNumber + 1;
+}
+
+function createBranchSlug(value: string) {
+  return slugifyProjectName(value).slice(0, 48) || 'task';
+}
+
+function createTaskBranch(taskId: string, title: string) {
+  return `kav/${taskId}-${createBranchSlug(title)}`;
 }
 
 function getTaskContextFiles(
@@ -216,6 +225,7 @@ function createTaskFromInput(
     agentId: input.agentId,
     reviewerId: input.reviewerId,
     requiresHumanReview: input.requiresHumanReview,
+    branch: input.branch?.trim() || createTaskBranch(taskId, input.title),
     tags: tagLabels.map((label, index) => ({
       label,
       color: tagColors[index % tagColors.length],
@@ -471,6 +481,7 @@ export function useKavbanLocalStore() {
         ...input,
         title: trimmedTitle,
         description: input.description.trim(),
+        branch: input.branch?.trim(),
         tagLabels: input.tagLabels.map((label) => label.trim()).filter(Boolean),
         dependencies: input.dependencies.filter(Boolean),
         contextFiles: input.contextFiles.filter(Boolean),
@@ -512,6 +523,7 @@ export function useKavbanLocalStore() {
         ...input,
         title: trimmedTitle,
         description: input.description.trim(),
+        branch: input.branch?.trim(),
         tagLabels,
         dependencies: input.dependencies.filter(Boolean),
         contextFiles: input.contextFiles.filter(Boolean),
@@ -540,6 +552,7 @@ export function useKavbanLocalStore() {
                         reviewerId: normalizedInput.reviewerId,
                         requiresHumanReview:
                           normalizedInput.requiresHumanReview,
+                        branch: normalizedInput.branch || undefined,
                         dependencies: normalizedInput.dependencies,
                         tags: (normalizedInput.tagLabels.length > 0
                           ? normalizedInput.tagLabels

@@ -1153,6 +1153,7 @@ function TaskCard({
         <span className="inline-flex size-6 items-center justify-center rounded-[5px] bg-[#282a2f] text-[#6f7682]">
           <ChartBarIcon className="size-4" weight="bold" />
         </span>
+        {task.branch && <BranchPill value={task.branch} />}
         {task.tags.slice(0, 2).map((tag) => (
           <TagPill key={tag.label} tag={tag} />
         ))}
@@ -1312,6 +1313,7 @@ function TaskEditForm({
   const [requiresHumanReview, setRequiresHumanReview] = useState(
     task.requiresHumanReview ?? true
   );
+  const [branch, setBranch] = useState(task.branch ?? '');
   const [tagText, setTagText] = useState(
     task.tags.map((tag) => tag.label).join(', ')
   );
@@ -1330,6 +1332,7 @@ function TaskEditForm({
     setAgentId(task.agentId);
     setReviewerId(task.reviewerId);
     setRequiresHumanReview(task.requiresHumanReview ?? true);
+    setBranch(task.branch ?? '');
     setTagText(task.tags.map((tag) => tag.label).join(', '));
     setSelectedContextFiles(task.contextFiles);
     setSelectedDependencies(task.dependencies);
@@ -1365,6 +1368,7 @@ function TaskEditForm({
           agentId,
           reviewerId,
           requiresHumanReview,
+          branch,
           tagLabels: tagText.split(','),
           dependencies: selectedDependencies,
           contextFiles: selectedContextFiles,
@@ -1507,6 +1511,28 @@ function TaskEditForm({
         <ShieldCheckIcon className="size-4 text-[#858b96]" weight="bold" />
         Require human review
       </label>
+
+      <div>
+        <label
+          htmlFor="edit-task-branch"
+          className="mb-1.5 block text-xs font-semibold text-[#777d88]"
+        >
+          Branch
+        </label>
+        <div className="relative">
+          <GitBranchIcon
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#58b957]"
+            weight="bold"
+          />
+          <input
+            id="edit-task-branch"
+            value={branch}
+            onChange={(event) => setBranch(event.target.value)}
+            className={cn(taskFormFieldClass, 'h-9 pl-9 font-ibm-plex-mono')}
+            placeholder="kav/kav-000123-task-name"
+          />
+        </div>
+      </div>
 
       <div>
         <label
@@ -1748,6 +1774,7 @@ function TaskDetailPanel({
             ['Priority', task.priority],
             ['Agent', getTaskAgent(task).name],
             ['Reviewer', getTaskReviewer(task).name],
+            ['Branch', task.branch ?? 'Not planned'],
             [
               'Human review',
               task.requiresHumanReview === false ? 'Optional' : 'Required',
@@ -1758,7 +1785,9 @@ function TaskDetailPanel({
               className="flex items-center justify-between gap-4"
             >
               <span className="text-[#777d88]">{label}</span>
-              <span className="text-[#cfd2da]">{value}</span>
+              <span className="min-w-0 truncate text-right text-[#cfd2da]">
+                {value}
+              </span>
             </div>
           ))}
         </div>

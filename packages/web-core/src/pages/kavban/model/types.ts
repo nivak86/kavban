@@ -24,6 +24,7 @@ export type KavbanInboxKind = 'codex' | 'claude' | 'approval' | 'github';
 
 export type KavbanTaskEventKind =
   | 'task-created'
+  | 'task-imported'
   | 'task-updated'
   | 'task-status-changed'
   | 'agent-started'
@@ -78,9 +79,18 @@ export type KavbanContextFile = {
 export type KavbanTaskEvent = {
   id: string;
   kind: KavbanTaskEventKind;
-  actor: KavbanAgentId | 'github' | 'human' | 'system';
+  actor: KavbanAgentId | 'github' | 'human' | 'system' | 'codex_intake';
   summary: string;
   createdAt: string;
+};
+
+export type KavbanTaskIntake = {
+  source: 'codex_annotation';
+  project?: string;
+  taskType?: string;
+  contextTags: string[];
+  rawPayload: string;
+  importedAt: string;
 };
 
 export type KavbanAgentRunStatus =
@@ -158,6 +168,7 @@ export type KavbanTask = {
   tags: KavbanTag[];
   dependencies: string[];
   contextFiles: string[];
+  intake?: KavbanTaskIntake;
   agentRuns?: KavbanAgentRun[];
   testStatus?: KavbanCheckStatus | 'not-run';
   reviewReports?: KavbanReviewReport[];

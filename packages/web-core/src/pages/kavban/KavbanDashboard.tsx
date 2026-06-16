@@ -54,6 +54,8 @@ import type {
   KavbanContextFileInput,
   KavbanCreateTaskInput,
   KavbanAgentId,
+  KavbanImportCodexTaskInput,
+  KavbanImportCodexTaskResult,
   KavbanInboxKind,
   KavbanInboxItem as InboxItem,
   KavbanProfile as Profile,
@@ -111,6 +113,22 @@ const taskAdvanceActions: Partial<
 };
 const taskFormFieldClass =
   'w-full rounded-[6px] border border-[#2a2c31] bg-[#111214] px-3 text-sm text-[#dce0e8] outline-none transition-colors placeholder:text-[#626874] focus:border-[#444956]';
+const codexIntakeExample = JSON.stringify(
+  {
+    project: 'Kavban Core',
+    title: 'Add daily health summary widget',
+    description:
+      'Create a dashboard widget that summarizes sleep, glucose, workout, and food data for the day.',
+    type: 'feature',
+    priority: 'medium',
+    suggested_agent: 'claude',
+    requires_human_review: true,
+    dependencies: [],
+    context_tags: ['dashboard', 'health-data', 'ui'],
+  },
+  null,
+  2
+);
 const getProfileFirstName = (profile: Profile) =>
   profile.displayName.split(' ')[0] || profile.displayName;
 
@@ -1451,6 +1469,130 @@ function TaskCreatePanel({
   );
 }
 
+function TaskImportPanel({
+  onCancel,
+  onImport,
+}: {
+  onCancel: () => void;
+  onImport: (
+    input: KavbanImportCodexTaskInput
+  ) => KavbanImportCodexTaskResult | null;
+}) {
+  const [payloadText, setPayloadText] = useState(codexIntakeExample);
+  const [error, setError] = useState('');
+
+  return (
+    <form
+      className="border-b border-[#24262b] bg-[#111214] px-6 py-5"
+      onSubmit={(event) => {
+        event.preventDefault();
+
+        try {
+          const parsedPayload = JSON.parse(payloadText) as unknown;
+
+          if (
+            !parsedPayload ||
+            typeof parsedPayload !== 'object' ||
+            Array.isArray(parsedPayload)
+          ) {
+            setError('Payload must be a JSON object.');
+            return;
+          }
+
+          const imported = onImport({
+            payload: parsedPayload as Record<string, unknown>,
+            rawPayload: payloadText,
+          });
+
+          if (!imported) {
+            setError('Payload needs a title field.');
+            return;
+          }
+
+          setError('');
+          setPayloadText(codexIntakeExample);
+        } catch {
+          setError('Payload must be valid JSON.');
+        }
+      }}
+    >
+      <div className="grid gap-4 xl:grid-cols-[minmax(320px,1fr)_280px]">
+        <div>
+          <label
+            htmlFor="codex-intake-json"
+            className="mb-1.5 block text-xs font-semibold text-[#777d88]"
+          >
+            Codex JSON
+          </label>
+          <textarea
+            id="codex-intake-json"
+            value={payloadText}
+            onChange={(event) => {
+              setPayloadText(event.target.value);
+              setError('');
+            }}
+            className={`${taskFormFieldClass} min-h-[220px] resize-y py-3 font-ibm-plex-mono text-xs leading-5`}
+            spellCheck={false}
+          />
+        </div>
+
+        <div className="flex flex-col justify-between gap-4">
+          <div className="rounded-[7px] border border-[#24262b] bg-[#17181b] p-4">
+            <BracketsCurlyIcon
+              className="mb-3 size-5 text-[#f2d14b]"
+              weight="bold"
+            />
+            <h3 className="text-sm font-semibold text-[#dce0e8]">
+              Codex intake
+            </h3>
+            <div className="mt-3 grid gap-2 text-xs text-[#8d939f]">
+              <div className="flex justify-between gap-3">
+                <span>Default status</span>
+                <span className="font-semibold text-[#cfd2da]">Backlog</span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span>Source</span>
+                <span className="font-semibold text-[#cfd2da]">
+                  Annotation
+                </span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span>Context</span>
+                <span className="font-semibold text-[#cfd2da]">
+                  Project pack
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {error && (
+            <div className="rounded-[7px] border border-[#553131] bg-[#211719] px-3 py-2 text-sm text-[#f26d6d]">
+              {error}
+            </div>
+          )}
+
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="h-9 rounded-[6px] border border-[#2a2c31] px-3 text-xs font-semibold text-[#9ca1ad] transition-colors hover:bg-[#202227]"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="flex h-9 items-center gap-2 rounded-[6px] border border-[#31553a] px-3 text-xs font-semibold text-[#78d16d] transition-colors hover:bg-[#172219]"
+            >
+              <BracketsCurlyIcon className="size-4" weight="bold" />
+              Import task
+            </button>
+          </div>
+        </div>
+      </div>
+    </form>
+  );
+}
+
 function TaskCard({
   task,
   selected,
@@ -2339,6 +2481,12 @@ function TaskDetailPanel({
                   })
                 : 'Not rolled back',
             ],
+            ...(task.intake
+              ? [
+                  ['Source', 'Codex annotation'],
+                  ['Type', task.intake.taskType ?? 'Unspecified'],
+                ]
+              : []),
             [
               'Human review',
               task.requiresHumanReview === false ? 'Optional' : 'Required',
@@ -2355,6 +2503,50 @@ function TaskDetailPanel({
             </div>
           ))}
         </div>
+
+        {task.intake && (
+          <div>
+            <h3 className="mb-2 text-sm font-semibold text-[#dce0e8]">
+              Intake
+            </h3>
+            <div className="space-y-3 rounded-[7px] border border-[#24262b] bg-[#17181b] p-3">
+              <div className="grid gap-2 text-sm">
+                <div className="flex justify-between gap-4">
+                  <span className="text-[#777d88]">Project</span>
+                  <span className="min-w-0 truncate text-right text-[#cfd2da]">
+                    {task.intake.project ?? 'Current workspace'}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span className="text-[#777d88]">Imported</span>
+                  <span className="text-right text-[#cfd2da]">
+                    {new Date(task.intake.importedAt).toLocaleString([], {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                </div>
+              </div>
+              {task.intake.contextTags.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {task.intake.contextTags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="inline-flex h-7 items-center rounded-[5px] border border-[#2a2c31] bg-[#202227] px-2 text-xs font-semibold text-[#9ca1ad]"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <pre className="max-h-40 overflow-auto rounded-[6px] border border-[#24262b] bg-[#101113] p-3 font-ibm-plex-mono text-xs leading-5 text-[#8d939f]">
+                {task.intake.rawPayload}
+              </pre>
+            </div>
+          </div>
+        )}
 
         <div>
           <h3 className="mb-2 text-sm font-semibold text-[#dce0e8]">
@@ -2531,6 +2723,7 @@ function WorkspaceTasks({
   onAddTaskComment,
   onCreateTask,
   onDeleteTask,
+  onImportCodexTask,
   onMergeTask,
   onMoveTask,
   onOpenRollbackPullRequest,
@@ -2555,6 +2748,9 @@ function WorkspaceTasks({
   ) => boolean;
   onCreateTask: (input: KavbanCreateTaskInput) => string | null;
   onDeleteTask: (taskId: string) => boolean;
+  onImportCodexTask: (
+    input: KavbanImportCodexTaskInput
+  ) => KavbanImportCodexTaskResult | null;
   onMergeTask: (taskId: string) => boolean;
   onMoveTask: (taskId: string, status: TaskStatus) => boolean;
   onOpenRollbackPullRequest: (taskId: string) => string | null;
@@ -2578,6 +2774,7 @@ function WorkspaceTasks({
   tasks: Task[];
 }) {
   const [isCreatingTask, setIsCreatingTask] = useState(false);
+  const [isImportingTask, setIsImportingTask] = useState(false);
   const [taskCreateStatus, setTaskCreateStatus] =
     useState<TaskStatus>('backlog');
   const selectedTask =
@@ -2586,6 +2783,7 @@ function WorkspaceTasks({
   const openCreateTask = (status: TaskStatus = 'backlog') => {
     setTaskCreateStatus(status);
     setIsCreatingTask(true);
+    setIsImportingTask(false);
   };
 
   const handleCreateTask = (input: KavbanCreateTaskInput) => {
@@ -2597,6 +2795,22 @@ function WorkspaceTasks({
     }
 
     return createdTaskId;
+  };
+
+  const openImportTask = () => {
+    setIsCreatingTask(false);
+    setIsImportingTask(true);
+  };
+
+  const handleImportTask = (input: KavbanImportCodexTaskInput) => {
+    const importedTask = onImportCodexTask(input);
+
+    if (importedTask) {
+      onSelectTask(importedTask.taskId);
+      setIsImportingTask(false);
+    }
+
+    return importedTask;
   };
 
   const handleDeleteTask = (taskId: string) => {
@@ -2646,6 +2860,11 @@ function WorkspaceTasks({
               <IconButton label="Filter tasks" icon={FunnelSimpleIcon} />
               <IconButton label="Task display" icon={SlidersHorizontalIcon} />
               <IconButton
+                label="Import Codex task"
+                icon={BracketsCurlyIcon}
+                onClick={openImportTask}
+              />
+              <IconButton
                 label="New task"
                 icon={PlusIcon}
                 onClick={() => openCreateTask()}
@@ -2663,6 +2882,12 @@ function WorkspaceTasks({
             dependencyTasks={tasks}
             onCancel={() => setIsCreatingTask(false)}
             onCreate={handleCreateTask}
+          />
+        )}
+        {isImportingTask && (
+          <TaskImportPanel
+            onCancel={() => setIsImportingTask(false)}
+            onImport={handleImportTask}
           />
         )}
         {tasks.length === 0 ? (
@@ -3416,6 +3641,7 @@ function WorkspaceView({
   onCreateTask,
   onDeleteContextFile,
   onDeleteTask,
+  onImportCodexTask,
   onMergeTask,
   onMoveTask,
   onOpenRollbackPullRequest,
@@ -3451,6 +3677,9 @@ function WorkspaceView({
   onCreateTask: (input: KavbanCreateTaskInput) => string | null;
   onDeleteContextFile: (path: string) => boolean;
   onDeleteTask: (taskId: string) => boolean;
+  onImportCodexTask: (
+    input: KavbanImportCodexTaskInput
+  ) => KavbanImportCodexTaskResult | null;
   onMergeTask: (taskId: string) => boolean;
   onMoveTask: (taskId: string, status: TaskStatus) => boolean;
   onOpenRollbackPullRequest: (taskId: string) => string | null;
@@ -3514,6 +3743,7 @@ function WorkspaceView({
             onCreateAiReview={onCreateAiReview}
             onCreateTask={onCreateTask}
             onDeleteTask={onDeleteTask}
+            onImportCodexTask={onImportCodexTask}
             onMergeTask={onMergeTask}
             onMoveTask={onMoveTask}
             onOpenRollbackPullRequest={onOpenRollbackPullRequest}
@@ -3651,6 +3881,7 @@ export function KavbanDashboard() {
     createTask,
     deleteContextFile,
     deleteTask,
+    importCodexTask,
     inboxItems,
     mergeTaskPullRequest,
     moveTask,
@@ -3736,6 +3967,7 @@ export function KavbanDashboard() {
               onCreateTask={createTask}
               onDeleteContextFile={deleteContextFile}
               onDeleteTask={deleteTask}
+              onImportCodexTask={importCodexTask}
               onMergeTask={mergeTaskPullRequest}
               onMoveTask={moveTask}
               onOpenRollbackPullRequest={openRollbackPullRequest}

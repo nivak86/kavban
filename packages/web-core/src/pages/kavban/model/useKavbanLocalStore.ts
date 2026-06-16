@@ -18,6 +18,7 @@ import type {
   KavbanReviewStatus,
   KavbanTask,
   KavbanTaskEventKind,
+  KavbanTaskIntake,
   KavbanTaskPriority,
   KavbanTaskStatus,
 } from './types';
@@ -34,6 +35,18 @@ export type KavbanCreateTaskInput = {
   tagLabels: string[];
   dependencies: string[];
   contextFiles: string[];
+};
+
+export type KavbanCodexTaskPayload = Record<string, unknown>;
+
+export type KavbanImportCodexTaskInput = {
+  payload: KavbanCodexTaskPayload;
+  rawPayload: string;
+};
+
+export type KavbanImportCodexTaskResult = {
+  projectId: string;
+  taskId: string;
 };
 
 export type KavbanUpdateTaskInput = KavbanCreateTaskInput;
@@ -89,6 +102,10 @@ function slugifyProjectName(name: string) {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '') || 'project'
   );
+}
+
+function normalizeLookupToken(value: string) {
+  return slugifyProjectName(value).toLowerCase();
 }
 
 function createProjectFromSeed(name: string): KavbanProject {
@@ -323,14 +340,187 @@ function replaceContextFilePath(paths: string[], from: string, to: string) {
   );
 }
 
+function getPayloadString(value: unknown) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function getPayloadStringList(value: unknown) {
+  if (Array.isArray(value)) {
+    return Array.from(
+      new Set(
+        value
+          .map((item) => getPayloadString(item))
+          .filter((item) => item.length > 0)
+      )
+    );
+  }
+
+  const stringValue = getPayloadString(value);
+
+  if (!stringValue) {
+    return [];
+  }
+
+  return stringValue
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function getPayloadBoolean(value: unknown, fallback: boolean) {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  const stringValue = getPayloadString(value).toLowerCase();
+
+  if (stringValue === 'true') {
+    return true;
+  }
+
+  if (stringValue === 'false') {
+    return false;
+  }
+
+  return fallback;
+}
+
+function normalizePayloadPriority(value: unknown): KavbanTaskPriority {
+  const priority = getPayloadString(value).toLowerCase();
+
+  if (priority === 'high') {
+    return 'High';
+  }
+
+  if (priority === 'low') {
+    return 'Low';
+  }
+
+  return 'Medium';
+}
+
+function normalizePayloadAgent(
+  value: unknown,
+  defaultAgentId: KavbanAgentId
+): KavbanAgentId {
+  const agentId = getPayloadString(value).toLowerCase();
+
+  if (agentId === 'codex' || agentId === 'claude') {
+    return agentId;
+  }
+
+  return defaultAgentId;
+}
+
+function getCodexPayloadContextTags(payload: KavbanCodexTaskPayload) {
+  return getPayloadStringList(
+    payload.context_tags ?? payload.contextTags ?? payload.context
+  );
+}
+
+function getCodexPayloadContextFiles(payload: KavbanCodexTaskPayload) {
+  return getPayloadStringList(payload.context_files ?? payload.contextFiles);
+}
+
+function findCodexTargetProject(
+  projects: KavbanProject[],
+  activeProjectId: string,
+  projectValue: unknown
+) {
+  const requestedProject = getPayloadString(projectValue);
+  const activeProject =
+    projects.find((project) => project.id === activeProjectId) ?? projects[0];
+
+  if (!requestedProject) {
+    return activeProject;
+  }
+
+  const requestedToken = normalizeLookupToken(requestedProject);
+  const matchedProject = projects.find((project) => {
+    const candidates = [
+      project.id,
+      project.name,
+      project.repository.name,
+      `${project.repository.owner}/${project.repository.name}`,
+    ];
+
+    return candidates.some(
+      (candidate) => normalizeLookupToken(candidate) === requestedToken
+    );
+  });
+
+  return matchedProject ?? activeProject;
+}
+
+function normalizeCodexTaskPayload(
+  project: KavbanProject,
+  payload: KavbanCodexTaskPayload,
+  rawPayload: string,
+  importedAt: string
+) {
+  const title = getPayloadString(payload.title);
+
+  if (!title) {
+    return null;
+  }
+
+  const taskType = getPayloadString(payload.type);
+  const contextTags = getCodexPayloadContextTags(payload);
+  const projectRouting = getProjectAgentRouting(project);
+  const tagLabels = Array.from(
+    new Set([taskType, ...contextTags].filter(Boolean))
+  );
+  const rawPayloadValue =
+    rawPayload.trim() || JSON.stringify(payload, null, 2);
+  const intake: KavbanTaskIntake = {
+    source: 'codex_annotation',
+    project: getPayloadString(payload.project) || undefined,
+    taskType: taskType || undefined,
+    contextTags,
+    rawPayload: rawPayloadValue,
+    importedAt,
+  };
+
+  return {
+    input: {
+      title,
+      description: getPayloadString(payload.description),
+      status: 'backlog' as const,
+      priority: normalizePayloadPriority(payload.priority),
+      agentId: normalizePayloadAgent(
+        payload.suggested_agent ?? payload.suggestedAgent,
+        projectRouting.defaultAgentId
+      ),
+      reviewerId: projectRouting.reviewerAgentId,
+      requiresHumanReview: getPayloadBoolean(
+        payload.requires_human_review ?? payload.requiresHumanReview,
+        projectRouting.humanReviewRequired
+      ),
+      tagLabels,
+      dependencies: getPayloadStringList(payload.dependencies),
+      contextFiles: getCodexPayloadContextFiles(payload),
+    },
+    intake,
+  };
+}
+
+type CreateTaskFromInputOptions = {
+  actor?: KavbanTask['events'][number]['actor'];
+  createdAt?: string;
+  eventKind?: KavbanTaskEventKind;
+  eventSummary?: string;
+  intake?: KavbanTaskIntake;
+};
+
 function createTaskFromInput(
   project: KavbanProject,
-  input: KavbanCreateTaskInput
+  input: KavbanCreateTaskInput,
+  options?: CreateTaskFromInputOptions
 ): KavbanTask {
   const taskNumber = getNextTaskNumber(project.tasks);
   const taskKey = `KAV-${taskNumber}`;
   const taskId = `kav-${String(taskNumber).padStart(6, '0')}`;
-  const createdAt = nowIso();
+  const createdAt = options?.createdAt ?? nowIso();
   const tagLabels =
     input.tagLabels.length > 0 ? input.tagLabels : ['Manual task'];
 
@@ -354,12 +544,13 @@ function createTaskFromInput(
     })),
     dependencies: input.dependencies,
     contextFiles: getTaskContextFiles(project, input),
+    ...(options?.intake ? { intake: options.intake } : {}),
     events: [
       {
         id: `evt-${taskId}-created`,
-        kind: 'task-created',
-        actor: 'human',
-        summary: 'Task created manually in Kavban.',
+        kind: options?.eventKind ?? 'task-created',
+        actor: options?.actor ?? 'human',
+        summary: options?.eventSummary ?? 'Task created manually in Kavban.',
         createdAt,
       },
     ],
@@ -625,6 +816,60 @@ export function useKavbanLocalStore() {
       return task.id;
     },
     [activeProject]
+  );
+
+  const importCodexTask = useCallback(
+    (input: KavbanImportCodexTaskInput): KavbanImportCodexTaskResult | null => {
+      const targetProject = findCodexTargetProject(
+        state.projects,
+        state.activeProjectId,
+        input.payload.project
+      );
+      const importedAt = nowIso();
+
+      if (!targetProject) {
+        return null;
+      }
+
+      const normalized = normalizeCodexTaskPayload(
+        targetProject,
+        input.payload,
+        input.rawPayload,
+        importedAt
+      );
+
+      if (!normalized) {
+        return null;
+      }
+
+      const task = createTaskFromInput(targetProject, normalized.input, {
+        actor: 'codex_intake',
+        createdAt: importedAt,
+        eventKind: 'task-imported',
+        eventSummary: 'Task created from Codex annotation.',
+        intake: normalized.intake,
+      });
+
+      setState((current) => ({
+        ...current,
+        activeProjectId: targetProject.id,
+        projects: current.projects.map((project) =>
+          project.id === targetProject.id
+            ? {
+                ...project,
+                tasks: [...project.tasks, task],
+              }
+            : project
+        ),
+        updatedAt: importedAt,
+      }));
+
+      return {
+        projectId: targetProject.id,
+        taskId: task.id,
+      };
+    },
+    [state.activeProjectId, state.projects]
   );
 
   const updateTask = useCallback(
@@ -1397,6 +1642,7 @@ export function useKavbanLocalStore() {
     createTask,
     deleteContextFile,
     deleteTask,
+    importCodexTask,
     inboxItems: state.inboxItems,
     mergeTaskPullRequest,
     moveTask,

@@ -208,6 +208,57 @@ const getTaskPullRequestUrl = (
 
   return `https://github.com/${repository.owner}/${repository.name}/pull/${pullNumber}`;
 };
+const getNormalizedTaskPayload = (
+  task: Task,
+  repository: Project['repository'],
+  contextFiles: Project['contextFiles']
+) => ({
+  task: {
+    id: task.id,
+    key: task.key,
+    title: task.title,
+    description: task.description,
+    type: task.intake?.taskType ?? task.tags[0]?.label ?? 'task',
+    priority: task.priority.toLowerCase(),
+    status: task.status,
+    repo: {
+      provider: repository.provider,
+      owner: repository.owner,
+      name: repository.name,
+      default_branch: repository.defaultBranch,
+      working_branch: task.branch ?? null,
+      pull_request: task.pr ?? null,
+    },
+    agent: {
+      assigned: task.agentId,
+      fallback: task.agentId === 'claude' ? 'codex' : 'claude',
+      reviewer: task.reviewerId,
+    },
+    dependencies: task.dependencies,
+    context_files: getTaskRunContextFiles(contextFiles, task),
+    execution: {
+      run_tests: true,
+      create_pr: true,
+      auto_merge: false,
+      requires_human_review: task.requiresHumanReview !== false,
+    },
+    review: {
+      ai_review_required: true,
+      ai_review_status: task.reviewStatus ?? 'not_started',
+      human_review_required: task.requiresHumanReview !== false,
+      approval_status: task.approvalStatus ?? 'not_requested',
+    },
+    created_from: task.intake
+      ? {
+          source: task.intake.source,
+          project: task.intake.project ?? null,
+          imported_at: task.intake.importedAt,
+        }
+      : {
+          source: 'manual',
+        },
+  },
+});
 const getLatestTaskChangeRequest = (task: Task) => {
   const event = [...task.events]
     .reverse()
@@ -2510,6 +2561,11 @@ function TaskDetailPanel({
     !task.pr &&
     task.status === 'approved' &&
     task.approvalStatus === 'approved';
+  const normalizedTaskJson = JSON.stringify(
+    getNormalizedTaskPayload(task, repository, contextFiles),
+    null,
+    2
+  );
   const canMergeTask =
     task.status !== 'done' &&
     task.approvalStatus === 'approved' &&
@@ -3366,7 +3422,10 @@ function TaskDetailPanel({
                     .map((connectorId) => connectors[connectorId].name)
                     .join(', '),
                 ],
-                ['Context files', String(getTaskRunContextFiles(contextFiles, task).length)],
+                [
+                  'Context files',
+                  String(getTaskRunContextFiles(contextFiles, task).length),
+                ],
               ].map(([label, value]) => (
                 <div
                   key={label}
@@ -3378,6 +3437,14 @@ function TaskDetailPanel({
                   </span>
                 </div>
               ))}
+            </div>
+            <div className="mt-4">
+              <h3 className="mb-2 text-sm font-semibold text-[#dce0e8]">
+                Normalized task JSON
+              </h3>
+              <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded-[6px] border border-[#24262b] bg-[#101113] p-3 font-ibm-plex-mono text-[11px] leading-5 text-[#8d939f]">
+                {normalizedTaskJson}
+              </pre>
             </div>
             <button
               type="button"

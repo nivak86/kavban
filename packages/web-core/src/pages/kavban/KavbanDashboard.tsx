@@ -979,8 +979,10 @@ function QueueMonitor({
   activeRunTasks,
   aiReviewTasks,
   humanReviewTasks,
+  prReadyTasks,
   onDismissSummary,
   onCreateAiReview,
+  onOpenTaskPullRequest,
   onRecordActiveRunCheck,
   onRecordHumanReview,
   onSelectTask,
@@ -992,11 +994,13 @@ function QueueMonitor({
   activeRunTasks: Task[];
   aiReviewTasks: Task[];
   humanReviewTasks: Task[];
+  prReadyTasks: Task[];
   onDismissSummary: () => void;
   onCreateAiReview: (
     taskId: string,
     input?: KavbanCreateAiReviewInput
   ) => string | null;
+  onOpenTaskPullRequest: (taskId: string) => string | null;
   onRecordActiveRunCheck: (
     taskId: string,
     runId: string,
@@ -1015,6 +1019,7 @@ function QueueMonitor({
   const hasActiveRuns = activeRunTasks.length > 0;
   const hasAiReviewTasks = aiReviewTasks.length > 0;
   const hasHumanReviewTasks = humanReviewTasks.length > 0;
+  const hasPrReadyTasks = prReadyTasks.length > 0;
   const hasReadyItems = readyItems.length > 0;
   const stats = [
     {
@@ -1047,6 +1052,11 @@ function QueueMonitor({
       value: humanReviewTasks.length,
       tone: humanReviewTasks.length > 0 ? 'text-[#f2d14b]' : 'text-[#777d88]',
     },
+    {
+      label: 'PR ready',
+      value: prReadyTasks.length,
+      tone: prReadyTasks.length > 0 ? 'text-[#58b957]' : 'text-[#777d88]',
+    },
   ];
 
   return (
@@ -1071,7 +1081,7 @@ function QueueMonitor({
               </button>
             )}
           </div>
-          <div className="grid grid-cols-2 gap-2 lg:grid-cols-6">
+          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4 xl:grid-cols-7">
             {stats.map((stat) => (
               <div
                 key={stat.label}
@@ -1317,10 +1327,58 @@ function QueueMonitor({
             </div>
           )}
 
+          {hasPrReadyTasks && (
+            <div
+              className={cn(
+                (hasReadyItems ||
+                  hasActiveRuns ||
+                  hasAiReviewTasks ||
+                  hasHumanReviewTasks) &&
+                  'mt-2 border-t border-[#24262b] pt-2'
+              )}
+            >
+              <div className="mb-1 px-2 text-[11px] font-semibold text-[#777d88]">
+                PR ready
+              </div>
+              <div className="space-y-1">
+                {prReadyTasks.slice(0, 4).map((task) => (
+                  <div
+                    key={task.id}
+                    className="grid min-h-10 w-full grid-cols-[72px_minmax(0,1fr)_auto_auto] items-center gap-2 rounded-[6px] px-2 text-xs transition-colors hover:bg-[#202227]"
+                  >
+                    <span className="font-ibm-plex-mono text-[#777d88]">
+                      {task.key}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => onSelectTask(task.id)}
+                      className="min-w-0 truncate text-left font-semibold text-[#cfd2da]"
+                    >
+                      {task.title}
+                    </button>
+                    <span className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-[5px] border border-[#31553a] bg-[#172219] px-2 text-xs font-medium text-[#78d16d]">
+                      <ShieldCheckIcon className="size-3.5" weight="bold" />
+                      Approved
+                    </span>
+                    <button
+                      type="button"
+                      aria-label={`Open draft PR for ${task.key}`}
+                      onClick={() => onOpenTaskPullRequest(task.id)}
+                      className="flex size-6 shrink-0 items-center justify-center rounded-[5px] border border-[#31553a] bg-[#172219] text-[#78d16d] transition-colors hover:border-[#427049]"
+                    >
+                      <GitPullRequestIcon className="size-3.5" weight="bold" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {!hasReadyItems &&
             !hasActiveRuns &&
             !hasAiReviewTasks &&
-            !hasHumanReviewTasks && (
+            !hasHumanReviewTasks &&
+            !hasPrReadyTasks && (
             <div className="flex min-h-10 items-center gap-2 rounded-[6px] px-2 text-sm text-[#777d88]">
               <ClockIcon className="size-4" weight="bold" />
               No ready tasks queued
@@ -4521,6 +4579,16 @@ function WorkspaceTasks({
     () => tasks.filter((task) => task.status === 'human-review'),
     [tasks]
   );
+  const prReadyTasks = useMemo(
+    () =>
+      tasks.filter(
+        (task) =>
+          task.status === 'approved' &&
+          task.approvalStatus === 'approved' &&
+          !task.pr
+      ),
+    [tasks]
+  );
 
   const openCreateTask = (status: TaskStatus = 'backlog') => {
     setTaskCreateStatus(status);
@@ -4707,8 +4775,10 @@ function WorkspaceTasks({
           activeRunTasks={activeRunTasks}
           aiReviewTasks={aiReviewTasks}
           humanReviewTasks={humanReviewTasks}
+          prReadyTasks={prReadyTasks}
           onDismissSummary={() => setQueueSummary('')}
           onCreateAiReview={onCreateAiReview}
+          onOpenTaskPullRequest={onOpenTaskPullRequest}
           onRecordActiveRunCheck={(taskId, runId, status) =>
             onRecordRunCheck(taskId, runId, {
               command: 'pnpm test',

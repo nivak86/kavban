@@ -292,6 +292,14 @@ function ReviewReportCard({
   );
 }
 
+type AgentRunPane = 'log' | 'prompt' | 'checks';
+
+const agentRunPaneOptions: { id: AgentRunPane; label: string }[] = [
+  { id: 'log', label: 'Log' },
+  { id: 'prompt', label: 'Prompt' },
+  { id: 'checks', label: 'Checks' },
+];
+
 function AgentRunCard({
   onRecordCheck,
   run,
@@ -299,8 +307,10 @@ function AgentRunCard({
   onRecordCheck: (runId: string, input: KavbanRecordRunCheckInput) => boolean;
   run: NonNullable<Task['agentRuns']>[number];
 }) {
+  const [activePane, setActivePane] = useState<AgentRunPane>('log');
   const agent = kavbanAgents[run.agentId];
   const checks = run.checks ?? [];
+  const logs = run.logs ?? [];
 
   return (
     <div className="rounded-[7px] border border-[#24262b] bg-[#17181b] p-3">
@@ -384,14 +394,119 @@ function AgentRunCard({
                   {check.status}
                 </span>
               </div>
-              <p className="truncate text-[#777d88]">{check.output}</p>
+              <p className="line-clamp-2 text-[#777d88]">{check.output}</p>
             </div>
           ))}
         </div>
       )}
-      <pre className="max-h-28 overflow-hidden whitespace-pre-wrap rounded-[6px] border border-[#24262b] bg-[#101113] p-3 font-ibm-plex-mono text-[11px] leading-5 text-[#8d939f]">
-        {run.prompt}
-      </pre>
+
+      <div className="rounded-[7px] border border-[#24262b] bg-[#101113]">
+        <div className="flex items-center justify-between gap-2 border-b border-[#24262b] px-2 py-2">
+          <div className="flex rounded-[6px] bg-[#17181b] p-0.5">
+            {agentRunPaneOptions.map((pane) => (
+              <button
+                type="button"
+                key={pane.id}
+                onClick={() => setActivePane(pane.id)}
+                className={cn(
+                  'h-6 rounded-[5px] px-2 text-[11px] font-semibold transition-colors',
+                  activePane === pane.id
+                    ? 'bg-[#25272d] text-[#dce0e8]'
+                    : 'text-[#777d88] hover:text-[#cfd2dc]'
+                )}
+              >
+                {pane.label}
+              </button>
+            ))}
+          </div>
+          <span className="font-ibm-plex-mono text-[11px] text-[#626874]">
+            {logs.length} lines
+          </span>
+        </div>
+
+        {activePane === 'log' && (
+          <div className="max-h-44 overflow-auto p-3 font-ibm-plex-mono text-[11px] leading-5">
+            {logs.length > 0 ? (
+              <div className="space-y-1.5">
+                {logs.map((log) => (
+                  <div
+                    key={log.id}
+                    className="grid grid-cols-[44px_52px_1fr] gap-2"
+                  >
+                    <span className="text-[#626874]">
+                      {new Date(log.createdAt).toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </span>
+                    <span
+                      className={cn(
+                        'uppercase',
+                        log.level === 'success' && 'text-[#78d16d]',
+                        log.level === 'error' && 'text-[#f26d6d]',
+                        log.level === 'warning' && 'text-[#f2d14b]',
+                        log.level === 'info' && 'text-[#8bbcff]'
+                      )}
+                    >
+                      {log.level}
+                    </span>
+                    <span className="min-w-0 whitespace-pre-wrap text-[#aeb3bd]">
+                      {log.message}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-[#777d88]">
+                <TerminalIcon className="size-3.5" weight="bold" />
+                No run logs yet
+              </div>
+            )}
+          </div>
+        )}
+
+        {activePane === 'prompt' && (
+          <pre className="max-h-44 overflow-auto whitespace-pre-wrap p-3 font-ibm-plex-mono text-[11px] leading-5 text-[#8d939f]">
+            {run.prompt}
+          </pre>
+        )}
+
+        {activePane === 'checks' && (
+          <div className="max-h-44 overflow-auto p-3">
+            {checks.length > 0 ? (
+              <div className="space-y-3">
+                {checks.map((check) => (
+                  <div key={check.id}>
+                    <div className="mb-1 flex items-center justify-between gap-3 text-[11px]">
+                      <span className="font-ibm-plex-mono text-[#aeb3bd]">
+                        {check.command}
+                      </span>
+                      <span
+                        className={cn(
+                          'font-ibm-plex-mono uppercase',
+                          check.status === 'passed'
+                            ? 'text-[#78d16d]'
+                            : 'text-[#f26d6d]'
+                        )}
+                      >
+                        {check.status}
+                      </span>
+                    </div>
+                    <pre className="whitespace-pre-wrap rounded-[6px] border border-[#24262b] bg-[#17181b] p-2 font-ibm-plex-mono text-[11px] leading-5 text-[#8d939f]">
+                      {check.output}
+                    </pre>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-xs text-[#777d88]">
+                <ListChecksIcon className="size-3.5" weight="bold" />
+                No checks recorded
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

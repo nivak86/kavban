@@ -89,6 +89,15 @@ export type KavbanAgentRunStatus =
 
 export type KavbanCheckStatus = 'passed' | 'failed';
 
+export type KavbanAgentRunLogLevel = 'info' | 'success' | 'warning' | 'error';
+
+export type KavbanAgentRunLog = {
+  id: string;
+  level: KavbanAgentRunLogLevel;
+  message: string;
+  createdAt: string;
+};
+
 export type KavbanRunCheck = {
   id: string;
   command: string;
@@ -105,6 +114,7 @@ export type KavbanAgentRun = {
   contextFiles: string[];
   prompt: string;
   checks?: KavbanRunCheck[];
+  logs?: KavbanAgentRunLog[];
   createdAt: string;
   updatedAt: string;
 };

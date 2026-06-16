@@ -743,6 +743,26 @@ export function useKavbanLocalStore() {
           runContextFiles
         ),
         checks: [],
+        logs: [
+          {
+            id: `log-${runId}-branch`,
+            level: 'info' as const,
+            message: `Created branch ${branch}.`,
+            createdAt: updatedAt,
+          },
+          {
+            id: `log-${runId}-context`,
+            level: 'info' as const,
+            message: `Attached ${runContextFiles.length} context files.`,
+            createdAt: updatedAt,
+          },
+          {
+            id: `log-${runId}-prompt`,
+            level: 'info' as const,
+            message: 'Generated execution prompt for the assigned agent.',
+            createdAt: updatedAt,
+          },
+        ],
         createdAt: updatedAt,
         updatedAt,
       };
@@ -810,9 +830,11 @@ export function useKavbanLocalStore() {
       const output =
         input.output?.trim() || `${command} ${input.status} from Kavban.`;
       const checkId = `chk-${runId}-${Date.now().toString(36)}`;
+      const logId = `log-${checkId}`;
       const eventKind: KavbanTaskEventKind =
         input.status === 'passed' ? 'tests-passed' : 'tests-failed';
       const runStatus = input.status === 'passed' ? 'completed' : 'failed';
+      const logLevel = input.status === 'passed' ? 'success' : 'error';
 
       setState((current) => ({
         ...current,
@@ -839,6 +861,15 @@ export function useKavbanLocalStore() {
                                     createdAt: updatedAt,
                                   },
                                   ...(run.checks ?? []),
+                                ],
+                                logs: [
+                                  ...(run.logs ?? []),
+                                  {
+                                    id: logId,
+                                    level: logLevel,
+                                    message: `${command} ${input.status}: ${output}`,
+                                    createdAt: updatedAt,
+                                  },
                                 ],
                                 updatedAt,
                               }

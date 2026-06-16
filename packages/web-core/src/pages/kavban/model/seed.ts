@@ -181,6 +181,26 @@ const projectTasks: KavbanTask[] = [
             createdAt: '2026-06-16T09:24:00.000Z',
           },
         ],
+        logs: [
+          {
+            id: 'log-kav-000123-branch',
+            level: 'info',
+            message: 'Created branch kav/kav-000123-run-agent.',
+            createdAt: '2026-06-16T09:20:00.000Z',
+          },
+          {
+            id: 'log-kav-000123-context',
+            level: 'info',
+            message: 'Attached agent-rules.md and review-checklist.md.',
+            createdAt: '2026-06-16T09:21:00.000Z',
+          },
+          {
+            id: 'log-kav-000123-tests',
+            level: 'success',
+            message: 'pnpm test passed.',
+            createdAt: '2026-06-16T09:24:00.000Z',
+          },
+        ],
         createdAt: '2026-06-16T09:20:00.000Z',
         updatedAt: '2026-06-16T09:24:00.000Z',
       },

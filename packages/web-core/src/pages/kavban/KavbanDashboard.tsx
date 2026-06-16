@@ -176,6 +176,17 @@ const getBlockingDependencies = (task: Task, projectTasks: Task[]) =>
   getDependencyItems(task, projectTasks).filter(
     (item) => !item.task || item.task.status !== 'done'
   );
+const getTaskRunConnectorIds = (task: Task): ConnectorId[] => [
+  'github',
+  task.agentId === 'claude' ? 'claude' : 'codex',
+];
+const getMissingTaskRunConnectors = (
+  connectors: Record<ConnectorId, Connector>,
+  task: Task
+) =>
+  getTaskRunConnectorIds(task)
+    .map((connectorId) => connectors[connectorId])
+    .filter((connector) => !connector.connected);
 
 function StatusIcon({ task }: { task: Task }) {
   const column = workflowColumns.find((item) => item.id === task.status);
@@ -2134,6 +2145,7 @@ function TaskEditForm({
 }
 
 function TaskDetailPanel({
+  connectors,
   contextFiles,
   onAddTaskComment,
   onCreateAiReview,
@@ -2149,6 +2161,7 @@ function TaskDetailPanel({
   projectTasks,
   task,
 }: {
+  connectors: Record<ConnectorId, Connector>;
   contextFiles: Project['contextFiles'];
   onAddTaskComment: (
     taskId: string,
@@ -2179,16 +2192,27 @@ function TaskDetailPanel({
   const [isEditing, setIsEditing] = useState(false);
   const dependencyItems = getDependencyItems(task, projectTasks);
   const blockingDependencies = getBlockingDependencies(task, projectTasks);
+  const missingRunConnectors = getMissingTaskRunConnectors(connectors, task);
   const taskLockAgent = getTaskLockAgent(task);
   const isTaskLocked = Boolean(taskLockAgent);
   const advanceAction = taskAdvanceActions[task.status];
   const isAdvanceBlocked =
     advanceAction?.status === 'progress' &&
-    (blockingDependencies.length > 0 || isTaskLocked);
+    (blockingDependencies.length > 0 ||
+      isTaskLocked ||
+      missingRunConnectors.length > 0);
   const agentRuns = task.agentRuns ?? [];
   const isRunAgentBlocked =
-    task.status === 'done' || blockingDependencies.length > 0 || isTaskLocked;
-  const runBlockedLabel = isTaskLocked ? 'Locked' : 'Blocked';
+    task.status === 'done' ||
+    blockingDependencies.length > 0 ||
+    isTaskLocked ||
+    missingRunConnectors.length > 0;
+  const runBlockedLabel =
+    missingRunConnectors.length > 0
+      ? 'Setup connectors'
+      : isTaskLocked
+        ? 'Locked'
+        : 'Blocked';
   const reviewReports = task.reviewReports ?? [];
   const latestReviewReport = reviewReports[0];
   const latestRunUpdatedAt = agentRuns[0]?.updatedAt;
@@ -2320,6 +2344,30 @@ function TaskDetailPanel({
             <p className="text-sm leading-5 text-[#cdb979]">
               {task.lockReason ?? 'Agent run in progress.'}
             </p>
+          </div>
+        )}
+
+        {missingRunConnectors.length > 0 && (
+          <div className="rounded-[7px] border border-[#553131] bg-[#211719] p-3">
+            <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#f26d6d]">
+              <PlugsConnectedIcon className="size-4" weight="bold" />
+              Missing connectors
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {missingRunConnectors.map((connector) => {
+                const Icon = connectorIconById[connector.id];
+
+                return (
+                  <span
+                    key={connector.id}
+                    className="inline-flex h-7 items-center gap-1.5 rounded-[5px] border border-[#553131] bg-[#25191b] px-2 text-xs font-semibold text-[#f26d6d]"
+                  >
+                    <Icon className="size-3.5" weight="bold" />
+                    {connector.name}
+                  </span>
+                );
+              })}
+            </div>
           </div>
         )}
 
@@ -2493,6 +2541,14 @@ function TaskDetailPanel({
             ['Agent', getTaskAgent(task).name],
             ['Reviewer', getTaskReviewer(task).name],
             ['Branch', task.branch ?? 'Not planned'],
+            [
+              'Connectors',
+              missingRunConnectors.length > 0
+                ? missingRunConnectors
+                    .map((connector) => connector.name)
+                    .join(', ')
+                : 'Ready',
+            ],
             [
               'Lock',
               taskLockAgent && task.lockedAt
@@ -2766,6 +2822,7 @@ function TaskDetailPanel({
 
 function WorkspaceTasks({
   agentRouting,
+  connectors,
   contextFiles,
   onCreateAiReview,
   onAddTaskComment,
@@ -2788,6 +2845,7 @@ function WorkspaceTasks({
   tasks,
 }: {
   agentRouting: KavbanAgentRoutingInput;
+  connectors: Record<ConnectorId, Connector>;
   contextFiles: Project['contextFiles'];
   onCreateAiReview: (taskId: string) => string | null;
   onAddTaskComment: (
@@ -2836,9 +2894,11 @@ function WorkspaceTasks({
     () =>
       readyTasks.filter(
         (task) =>
-          !task.lockedBy && getBlockingDependencies(task, tasks).length === 0
+          !task.lockedBy &&
+          getBlockingDependencies(task, tasks).length === 0 &&
+          getMissingTaskRunConnectors(connectors, task).length === 0
       ),
-    [readyTasks, tasks]
+    [connectors, readyTasks, tasks]
   );
   const waitingReadyTaskCount = readyTasks.length - runnableReadyTasks.length;
 
@@ -2893,7 +2953,7 @@ function WorkspaceTasks({
     if (runnableReadyTasks.length === 0) {
       setQueueSummary(
         waitingReadyTaskCount > 0
-          ? `${waitingReadyTaskCount} ready task${waitingReadyTaskCount === 1 ? '' : 's'} waiting on dependencies or locks.`
+          ? `${waitingReadyTaskCount} ready task${waitingReadyTaskCount === 1 ? '' : 's'} waiting on dependencies, locks, or connectors.`
           : 'No ready tasks available.'
       );
       return;
@@ -3039,6 +3099,7 @@ function WorkspaceTasks({
       </main>
       {selectedTask && taskView === 'list' && (
         <TaskDetailPanel
+          connectors={connectors}
           contextFiles={contextFiles}
           onAddTaskComment={onAddTaskComment}
           onCreateAiReview={onCreateAiReview}
@@ -3850,6 +3911,7 @@ function WorkspaceView({
         {projectTab === 'tasks' && (
           <WorkspaceTasks
             agentRouting={project.agentRouting ?? kavbanDefaultAgentRouting}
+            connectors={connectors}
             contextFiles={project.contextFiles}
             onAddTaskComment={onAddTaskComment}
             onCreateAiReview={onCreateAiReview}

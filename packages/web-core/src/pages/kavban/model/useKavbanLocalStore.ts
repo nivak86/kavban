@@ -190,6 +190,19 @@ function hasBlockingDependencies(task: KavbanTask, tasks: KavbanTask[]) {
   });
 }
 
+function getTaskRunConnectorIds(task: KavbanTask): KavbanConnectorId[] {
+  const agentConnectorId: KavbanConnectorId =
+    task.agentId === 'claude' ? 'claude' : 'codex';
+
+  return ['github', agentConnectorId];
+}
+
+function getMissingRunConnectorIds(project: KavbanProject, task: KavbanTask) {
+  return getTaskRunConnectorIds(task).filter(
+    (connectorId) => !project.connectors[connectorId]?.connected
+  );
+}
+
 function getTaskContextFiles(
   project: KavbanProject,
   input: KavbanCreateTaskInput
@@ -1001,6 +1014,7 @@ export function useKavbanLocalStore() {
         !taskToRun ||
         taskToRun.status === 'done' ||
         taskToRun.lockedBy ||
+        getMissingRunConnectorIds(activeProject, taskToRun).length > 0 ||
         hasBlockingDependencies(taskToRun, activeProject.tasks)
       ) {
         return null;

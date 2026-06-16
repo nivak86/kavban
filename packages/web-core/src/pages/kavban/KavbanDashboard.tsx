@@ -48,6 +48,7 @@ import type {
   KavbanAgent as Agent,
   KavbanConnector as Connector,
   KavbanConnectorId as ConnectorId,
+  KavbanContextFileInput,
   KavbanCreateTaskInput,
   KavbanAgentId,
   KavbanInboxKind,
@@ -1965,15 +1966,93 @@ function ConnectorCard({
 
 function WorkspaceSettings({
   brief,
-  onBriefChange,
   connectors,
+  contextFiles,
+  onBriefChange,
+  onCreateContextFile,
+  onDeleteContextFile,
   onToggleConnector,
+  onUpdateContextFile,
 }: {
   brief: string;
-  onBriefChange: (value: string) => void;
   connectors: Record<ConnectorId, Connector>;
+  contextFiles: Project['contextFiles'];
+  onBriefChange: (value: string) => void;
+  onCreateContextFile: (input: KavbanContextFileInput) => boolean;
+  onDeleteContextFile: (path: string) => boolean;
   onToggleConnector: (id: ConnectorId) => void;
+  onUpdateContextFile: (path: string, input: KavbanContextFileInput) => boolean;
 }) {
+  const [contextError, setContextError] = useState('');
+  const [newContextPath, setNewContextPath] = useState('');
+  const [newContextPurpose, setNewContextPurpose] = useState('');
+  const [newContextInjected, setNewContextInjected] = useState(true);
+  const [editingContextPath, setEditingContextPath] = useState<string | null>(
+    null
+  );
+  const [draftContextPath, setDraftContextPath] = useState('');
+  const [draftContextPurpose, setDraftContextPurpose] = useState('');
+  const [draftContextInjected, setDraftContextInjected] = useState(true);
+
+  useEffect(() => {
+    if (
+      editingContextPath &&
+      !contextFiles.some((file) => file.path === editingContextPath)
+    ) {
+      setEditingContextPath(null);
+    }
+  }, [contextFiles, editingContextPath]);
+
+  const resetNewContextFile = () => {
+    setNewContextPath('');
+    setNewContextPurpose('');
+    setNewContextInjected(true);
+  };
+
+  const createContextFile = () => {
+    const created = onCreateContextFile({
+      path: newContextPath,
+      purpose: newContextPurpose,
+      injected: newContextInjected,
+    });
+
+    if (!created) {
+      setContextError('Use a unique context file path before adding it.');
+      return;
+    }
+
+    setContextError('');
+    resetNewContextFile();
+  };
+
+  const startEditingContextFile = (file: Project['contextFiles'][number]) => {
+    setContextError('');
+    setEditingContextPath(file.path);
+    setDraftContextPath(file.path);
+    setDraftContextPurpose(file.purpose);
+    setDraftContextInjected(file.injected);
+  };
+
+  const saveContextFile = () => {
+    if (!editingContextPath) {
+      return;
+    }
+
+    const saved = onUpdateContextFile(editingContextPath, {
+      path: draftContextPath,
+      purpose: draftContextPurpose,
+      injected: draftContextInjected,
+    });
+
+    if (!saved) {
+      setContextError('Use a unique context file path before saving.');
+      return;
+    }
+
+    setContextError('');
+    setEditingContextPath(null);
+  };
+
   return (
     <div className="h-full overflow-y-auto bg-[#101113] px-6 py-7">
       <div className="mx-auto max-w-5xl space-y-5">
@@ -1993,6 +2072,198 @@ function WorkspaceSettings({
             onChange={(event) => onBriefChange(event.target.value)}
             className="min-h-[160px] w-full resize-y rounded-[7px] border border-[#2a2c31] bg-[#111214] p-4 text-sm leading-6 text-[#dce0e8] outline-none transition-colors placeholder:text-[#626874] focus:border-[#444956]"
           />
+        </section>
+
+        <section className="rounded-[8px] border border-[#24262b] bg-[#17181b] p-5">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <FileTextIcon className="size-5 text-[#858b96]" weight="bold" />
+              <h2 className="text-lg font-semibold text-[#dce0e8]">
+                Context files
+              </h2>
+            </div>
+            <span className="rounded-full border border-[#2a2c31] px-2 py-1 text-xs font-semibold text-[#858b96]">
+              {contextFiles.filter((file) => file.injected).length}/
+              {contextFiles.length} injected
+            </span>
+          </div>
+
+          <div className="mb-4 grid gap-3 lg:grid-cols-[1fr_1.3fr_auto_auto] lg:items-end">
+            <label className="block">
+              <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.08em] text-[#777d88]">
+                Path
+              </span>
+              <input
+                value={newContextPath}
+                onChange={(event) => setNewContextPath(event.target.value)}
+                placeholder="current-state.md"
+                className={cn(taskFormFieldClass, 'h-9')}
+              />
+            </label>
+            <label className="block">
+              <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.08em] text-[#777d88]">
+                Purpose
+              </span>
+              <input
+                value={newContextPurpose}
+                onChange={(event) => setNewContextPurpose(event.target.value)}
+                placeholder="Current priorities and recent decisions"
+                className={cn(taskFormFieldClass, 'h-9')}
+              />
+            </label>
+            <label className="flex h-9 items-center gap-2 rounded-[6px] border border-[#2a2c31] bg-[#111214] px-3 text-xs font-semibold text-[#cfd2da]">
+              <input
+                type="checkbox"
+                checked={newContextInjected}
+                onChange={(event) =>
+                  setNewContextInjected(event.target.checked)
+                }
+                className="size-4 accent-[#6aa7ff]"
+              />
+              Inject
+            </label>
+            <button
+              type="button"
+              onClick={createContextFile}
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-[6px] border border-[#31553a] px-3 text-xs font-semibold text-[#78d16d] transition-colors hover:bg-[#172219]"
+            >
+              <PlusIcon className="size-4" weight="bold" />
+              Add
+            </button>
+          </div>
+
+          {contextError && (
+            <p className="mb-4 rounded-[6px] border border-[#5c3434] bg-[#211719] px-3 py-2 text-xs font-semibold text-[#f26d6d]">
+              {contextError}
+            </p>
+          )}
+
+          <div className="space-y-3">
+            {contextFiles.map((file) => {
+              const isEditing = editingContextPath === file.path;
+
+              return (
+                <div
+                  key={file.path}
+                  className="rounded-[7px] border border-[#24262b] bg-[#111214] p-3"
+                >
+                  {isEditing ? (
+                    <div className="grid gap-3 lg:grid-cols-[1fr_1.3fr_auto_auto] lg:items-center">
+                      <input
+                        value={draftContextPath}
+                        onChange={(event) =>
+                          setDraftContextPath(event.target.value)
+                        }
+                        className={cn(taskFormFieldClass, 'h-9')}
+                      />
+                      <input
+                        value={draftContextPurpose}
+                        onChange={(event) =>
+                          setDraftContextPurpose(event.target.value)
+                        }
+                        className={cn(taskFormFieldClass, 'h-9')}
+                      />
+                      <label className="flex h-9 items-center gap-2 rounded-[6px] border border-[#2a2c31] bg-[#17181b] px-3 text-xs font-semibold text-[#cfd2da]">
+                        <input
+                          type="checkbox"
+                          checked={draftContextInjected}
+                          onChange={(event) =>
+                            setDraftContextInjected(event.target.checked)
+                          }
+                          className="size-4 accent-[#6aa7ff]"
+                        />
+                        Inject
+                      </label>
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={saveContextFile}
+                          className="inline-flex size-9 items-center justify-center rounded-[6px] border border-[#31553a] text-[#78d16d] transition-colors hover:bg-[#172219]"
+                          aria-label="Save context file"
+                        >
+                          <CheckCircleIcon className="size-4" weight="bold" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setContextError('');
+                            setEditingContextPath(null);
+                          }}
+                          className="inline-flex size-9 items-center justify-center rounded-[6px] border border-[#2a2c31] text-[#9ca1ad] transition-colors hover:bg-[#202227]"
+                          aria-label="Cancel context file edit"
+                        >
+                          <XIcon className="size-4" weight="bold" />
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="truncate font-ibm-plex-mono text-sm font-semibold text-[#dce0e8]">
+                            {file.path}
+                          </p>
+                          <span
+                            className={cn(
+                              'rounded-full border px-2 py-0.5 text-[11px] font-semibold',
+                              file.injected
+                                ? 'border-[#31553a] text-[#78d16d]'
+                                : 'border-[#2a2c31] text-[#858b96]'
+                            )}
+                          >
+                            {file.injected ? 'Injected' : 'Reference only'}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-sm leading-6 text-[#8d939f]">
+                          {file.purpose}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onUpdateContextFile(file.path, {
+                              ...file,
+                              injected: !file.injected,
+                            })
+                          }
+                          className="inline-flex h-9 items-center gap-2 rounded-[6px] border border-[#2a2c31] px-3 text-xs font-semibold text-[#cfd2da] transition-colors hover:bg-[#202227]"
+                        >
+                          {file.injected ? (
+                            <XIcon className="size-4" weight="bold" />
+                          ) : (
+                            <CheckCircleIcon className="size-4" weight="bold" />
+                          )}
+                          {file.injected ? 'Exclude' : 'Inject'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => startEditingContextFile(file)}
+                          className="inline-flex size-9 items-center justify-center rounded-[6px] border border-[#2a2c31] text-[#9ca1ad] transition-colors hover:bg-[#202227]"
+                          aria-label={`Edit ${file.path}`}
+                        >
+                          <PencilSimpleIcon className="size-4" weight="bold" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onDeleteContextFile(file.path);
+                            if (editingContextPath === file.path) {
+                              setEditingContextPath(null);
+                            }
+                          }}
+                          className="inline-flex size-9 items-center justify-center rounded-[6px] border border-[#3b2a2d] text-[#f26d6d] transition-colors hover:bg-[#221719]"
+                          aria-label={`Remove ${file.path}`}
+                        >
+                          <TrashIcon className="size-4" weight="bold" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </section>
 
         <section>
@@ -2026,8 +2297,10 @@ function WorkspaceView({
   activeProjectId,
   connectors,
   onBriefChange,
+  onCreateContextFile,
   onCreateProject,
   onCreateTask,
+  onDeleteContextFile,
   onDeleteTask,
   onMoveTask,
   onProjectTabChange,
@@ -2035,6 +2308,7 @@ function WorkspaceView({
   onSelectTask,
   onTaskViewChange,
   onToggleConnector,
+  onUpdateContextFile,
   onUpdateTask,
   project,
   projectTab,
@@ -2045,8 +2319,10 @@ function WorkspaceView({
   activeProjectId: string;
   connectors: Record<ConnectorId, Connector>;
   onBriefChange: (value: string) => void;
+  onCreateContextFile: (input: KavbanContextFileInput) => boolean;
   onCreateProject: (name: string) => void;
   onCreateTask: (input: KavbanCreateTaskInput) => string | null;
+  onDeleteContextFile: (path: string) => boolean;
   onDeleteTask: (taskId: string) => boolean;
   onMoveTask: (taskId: string, status: TaskStatus) => boolean;
   onProjectTabChange: (tab: ProjectTab) => void;
@@ -2054,6 +2330,7 @@ function WorkspaceView({
   onSelectTask: (id: string) => void;
   onTaskViewChange: (view: TaskView) => void;
   onToggleConnector: (id: ConnectorId) => void;
+  onUpdateContextFile: (path: string, input: KavbanContextFileInput) => boolean;
   onUpdateTask: (taskId: string, input: KavbanUpdateTaskInput) => boolean;
   project: Project;
   projectTab: ProjectTab;
@@ -2106,9 +2383,13 @@ function WorkspaceView({
         {projectTab === 'settings' && (
           <WorkspaceSettings
             brief={project.brief}
-            onBriefChange={onBriefChange}
             connectors={connectors}
+            contextFiles={project.contextFiles}
+            onBriefChange={onBriefChange}
+            onCreateContextFile={onCreateContextFile}
+            onDeleteContextFile={onDeleteContextFile}
             onToggleConnector={onToggleConnector}
+            onUpdateContextFile={onUpdateContextFile}
           />
         )}
       </div>
@@ -2209,8 +2490,10 @@ function ProfileView({ profile }: { profile: Profile }) {
 export function KavbanDashboard() {
   const {
     activeProjectId,
+    createContextFile,
     createProject,
     createTask,
+    deleteContextFile,
     deleteTask,
     inboxItems,
     moveTask,
@@ -2219,6 +2502,7 @@ export function KavbanDashboard() {
     projects,
     selectProject,
     updateConnector,
+    updateContextFile,
     updateProjectBrief,
     updateTask,
   } = useKavbanLocalStore();
@@ -2280,8 +2564,10 @@ export function KavbanDashboard() {
               activeProjectId={activeProjectId}
               connectors={project.connectors}
               onBriefChange={updateProjectBrief}
+              onCreateContextFile={createContextFile}
               onCreateProject={createProject}
               onCreateTask={createTask}
+              onDeleteContextFile={deleteContextFile}
               onDeleteTask={deleteTask}
               onMoveTask={moveTask}
               onProjectTabChange={setProjectTab}
@@ -2289,6 +2575,7 @@ export function KavbanDashboard() {
               onSelectTask={setSelectedTaskId}
               onTaskViewChange={setTaskView}
               onToggleConnector={toggleConnector}
+              onUpdateContextFile={updateContextFile}
               onUpdateTask={updateTask}
               project={project}
               projectTab={projectTab}

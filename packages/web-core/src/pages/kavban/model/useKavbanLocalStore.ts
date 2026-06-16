@@ -10,6 +10,7 @@ import type {
   KavbanAgentId,
   KavbanConnector,
   KavbanConnectorId,
+  KavbanContextFile,
   KavbanProject,
   KavbanTask,
   KavbanTaskPriority,
@@ -29,6 +30,12 @@ export type KavbanCreateTaskInput = {
 };
 
 export type KavbanUpdateTaskInput = KavbanCreateTaskInput;
+
+export type KavbanContextFileInput = {
+  path: string;
+  purpose: string;
+  injected: boolean;
+};
 
 const taskStateByStatus: Record<KavbanTaskStatus, string> = {
   backlog: 'Draft',
@@ -107,6 +114,28 @@ function getTaskContextFiles(
   return project.contextFiles
     .filter((file) => file.injected)
     .map((file) => file.path);
+}
+
+function normalizeContextFile(
+  input: KavbanContextFileInput
+): KavbanContextFile | null {
+  const path = input.path.trim();
+
+  if (!path) {
+    return null;
+  }
+
+  return {
+    path,
+    purpose: input.purpose.trim() || 'Project context file',
+    injected: input.injected,
+  };
+}
+
+function replaceContextFilePath(paths: string[], from: string, to: string) {
+  return Array.from(
+    new Set(paths.map((path) => (path === from ? to : path)).filter(Boolean))
+  );
 }
 
 function createTaskFromInput(
@@ -201,6 +230,118 @@ export function useKavbanLocalStore() {
       updatedAt: nowIso(),
     }));
   }, []);
+
+  const createContextFile = useCallback(
+    (input: KavbanContextFileInput) => {
+      const file = normalizeContextFile(input);
+
+      if (
+        !file ||
+        activeProject.contextFiles.some(
+          (contextFile) => contextFile.path === file.path
+        )
+      ) {
+        return false;
+      }
+
+      setState((current) => ({
+        ...current,
+        projects: current.projects.map((project) =>
+          project.id === current.activeProjectId
+            ? {
+                ...project,
+                contextFiles: [...project.contextFiles, file],
+              }
+            : project
+        ),
+        updatedAt: nowIso(),
+      }));
+
+      return true;
+    },
+    [activeProject.contextFiles]
+  );
+
+  const updateContextFile = useCallback(
+    (path: string, input: KavbanContextFileInput) => {
+      const file = normalizeContextFile(input);
+
+      if (
+        !file ||
+        !activeProject.contextFiles.some(
+          (contextFile) => contextFile.path === path
+        ) ||
+        activeProject.contextFiles.some(
+          (contextFile) =>
+            contextFile.path !== path && contextFile.path === file.path
+        )
+      ) {
+        return false;
+      }
+
+      setState((current) => ({
+        ...current,
+        projects: current.projects.map((project) =>
+          project.id === current.activeProjectId
+            ? {
+                ...project,
+                contextFiles: project.contextFiles.map((contextFile) =>
+                  contextFile.path === path ? file : contextFile
+                ),
+                tasks: project.tasks.map((task) => ({
+                  ...task,
+                  contextFiles: replaceContextFilePath(
+                    task.contextFiles,
+                    path,
+                    file.path
+                  ),
+                })),
+              }
+            : project
+        ),
+        updatedAt: nowIso(),
+      }));
+
+      return true;
+    },
+    [activeProject.contextFiles]
+  );
+
+  const deleteContextFile = useCallback(
+    (path: string) => {
+      if (
+        !activeProject.contextFiles.some(
+          (contextFile) => contextFile.path === path
+        )
+      ) {
+        return false;
+      }
+
+      setState((current) => ({
+        ...current,
+        projects: current.projects.map((project) =>
+          project.id === current.activeProjectId
+            ? {
+                ...project,
+                contextFiles: project.contextFiles.filter(
+                  (contextFile) => contextFile.path !== path
+                ),
+                tasks: project.tasks.map((task) => ({
+                  ...task,
+                  contextFiles: task.contextFiles.filter(
+                    (contextFilePath) => contextFilePath !== path
+                  ),
+                })),
+              }
+            : project
+        ),
+        updatedAt: nowIso(),
+      }));
+
+      return true;
+    },
+    [activeProject.contextFiles]
+  );
 
   const createTask = useCallback(
     (input: KavbanCreateTaskInput) => {
@@ -427,8 +568,10 @@ export function useKavbanLocalStore() {
 
   return {
     activeProjectId: state.activeProjectId,
+    createContextFile,
     createProject,
     createTask,
+    deleteContextFile,
     deleteTask,
     inboxItems: state.inboxItems,
     moveTask,
@@ -438,6 +581,7 @@ export function useKavbanLocalStore() {
     selectProject,
     state,
     updateConnector,
+    updateContextFile,
     updateProjectBrief,
     updateTask,
   };

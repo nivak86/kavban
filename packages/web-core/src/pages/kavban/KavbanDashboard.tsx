@@ -144,6 +144,51 @@ const getTaskLockAgent = (task: Task) =>
   task.lockedBy ? kavbanAgents[task.lockedBy] : null;
 const getTaskActivity = (task: Task) =>
   task.events.map((event) => event.summary);
+const getTaskFileChanges = (task: Task): NonNullable<Task['fileChanges']> => {
+  if (task.fileChanges?.length) {
+    return task.fileChanges;
+  }
+
+  if (!task.branch && !task.pr && task.testStatus !== 'passed') {
+    return [];
+  }
+
+  const titleToken = task.title
+    .split(/\s+/)
+    .slice(0, 3)
+    .join('-')
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, '');
+
+  return [
+    {
+      path: `packages/web-core/src/pages/kavban/${task.key.toLowerCase()}-${titleToken}.tsx`,
+      status: 'modified',
+      additions: 42,
+      deletions: 9,
+      summary: 'Updated the task workflow surface for this card.',
+    },
+    {
+      path: 'packages/web-core/src/pages/kavban/model/useKavbanLocalStore.ts',
+      status: 'modified',
+      additions: 18,
+      deletions: 4,
+      summary: 'Recorded the agent, review, and GitHub state transitions.',
+    },
+  ];
+};
+const getTaskPullRequestUrl = (
+  repository: Project['repository'],
+  pr?: string
+) => {
+  if (!pr) {
+    return null;
+  }
+
+  const pullNumber = pr.replace('#', '');
+
+  return `https://github.com/${repository.owner}/${repository.name}/pull/${pullNumber}`;
+};
 const getLatestTaskChangeRequest = (task: Task) => {
   const event = [...task.events]
     .reverse()
@@ -394,8 +439,56 @@ function ReviewReportCard({
   );
 }
 
+function FileChangeCard({
+  change,
+}: {
+  change: NonNullable<Task['fileChanges']>[number];
+}) {
+  const statusStyles = {
+    added: 'text-[#78d16d]',
+    modified: 'text-[#8bbcff]',
+    deleted: 'text-[#f26d6d]',
+  } satisfies Record<typeof change.status, string>;
+
+  return (
+    <div className="rounded-[7px] border border-[#24262b] bg-[#17181b] p-3">
+      <div className="mb-2 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate font-ibm-plex-mono text-xs text-[#cfd2da]">
+            {change.path}
+          </p>
+          <p className="mt-1 text-sm leading-5 text-[#8d939f]">
+            {change.summary}
+          </p>
+        </div>
+        <span
+          className={cn(
+            'shrink-0 font-ibm-plex-mono text-[11px] uppercase',
+            statusStyles[change.status]
+          )}
+        >
+          {change.status}
+        </span>
+      </div>
+      <div className="flex items-center gap-3 font-ibm-plex-mono text-xs">
+        <span className="text-[#78d16d]">+{change.additions}</span>
+        <span className="text-[#f26d6d]">-{change.deletions}</span>
+      </div>
+    </div>
+  );
+}
+
 type AgentRunPane = 'log' | 'prompt' | 'checks';
-type TaskDetailTab = 'overview' | 'run' | 'review' | 'chat' | 'history';
+type TaskDetailTab =
+  | 'overview'
+  | 'instructions'
+  | 'context'
+  | 'run'
+  | 'review'
+  | 'files'
+  | 'chat'
+  | 'github'
+  | 'settings';
 
 const agentRunPaneOptions: { id: AgentRunPane; label: string }[] = [
   { id: 'log', label: 'Log' },
@@ -404,10 +497,14 @@ const agentRunPaneOptions: { id: AgentRunPane; label: string }[] = [
 ];
 const taskDetailTabOptions: { id: TaskDetailTab; label: string }[] = [
   { id: 'overview', label: 'Overview' },
+  { id: 'instructions', label: 'Instructions' },
+  { id: 'context', label: 'Context' },
   { id: 'run', label: 'Agent run' },
   { id: 'review', label: 'Review' },
-  { id: 'chat', label: 'Chat' },
-  { id: 'history', label: 'History' },
+  { id: 'files', label: 'Files changed' },
+  { id: 'chat', label: 'Chat history' },
+  { id: 'github', label: 'GitHub / PR' },
+  { id: 'settings', label: 'Settings' },
 ];
 
 function AgentRunCard({
@@ -2217,6 +2314,7 @@ function TaskDetailPanel({
   onStartAgentRun,
   onUpdateTask,
   projectTasks,
+  repository,
   task,
 }: {
   connectors: Record<ConnectorId, Connector>;
@@ -2244,6 +2342,7 @@ function TaskDetailPanel({
   onStartAgentRun: (taskId: string) => string | null;
   onUpdateTask: (taskId: string, input: KavbanUpdateTaskInput) => boolean;
   projectTasks: Task[];
+  repository: Project['repository'];
   task: Task;
 }) {
   const [commentText, setCommentText] = useState('');
@@ -2280,6 +2379,8 @@ function TaskDetailPanel({
         ? 'Locked'
         : 'Blocked';
   const reviewReports = task.reviewReports ?? [];
+  const fileChanges = getTaskFileChanges(task);
+  const pullRequestUrl = getTaskPullRequestUrl(repository, task.pr);
   const latestReviewReport = reviewReports[0];
   const latestRunUpdatedAt = agentRuns[0]?.updatedAt;
   const latestChangeRequest = getLatestTaskChangeRequest(task);
@@ -2631,7 +2732,7 @@ function TaskDetailPanel({
           </div>
         )}
 
-        <div className="flex overflow-x-auto rounded-[7px] bg-[#191b1f] p-1">
+        <div className="flex flex-wrap gap-1 rounded-[7px] bg-[#191b1f] p-1">
           {taskDetailTabOptions.map((tab) => (
             <button
               key={tab.id}
@@ -2815,6 +2916,126 @@ function TaskDetailPanel({
           </>
         )}
 
+        {activeDetailTab === 'instructions' && (
+          <div className="space-y-3">
+            <div>
+              <h3 className="mb-2 text-sm font-semibold text-[#dce0e8]">
+                Instructions
+              </h3>
+              <div className="rounded-[7px] border border-[#24262b] bg-[#17181b] p-3 text-sm leading-6 text-[#aeb3bd]">
+                {task.description}
+              </div>
+            </div>
+            {agentRuns[0]?.prompt && (
+              <div>
+                <h3 className="mb-2 text-sm font-semibold text-[#dce0e8]">
+                  Latest agent prompt
+                </h3>
+                <pre className="max-h-52 overflow-auto whitespace-pre-wrap rounded-[6px] border border-[#24262b] bg-[#101113] p-3 font-ibm-plex-mono text-xs leading-5 text-[#8d939f]">
+                  {agentRuns[0].prompt}
+                </pre>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeDetailTab === 'context' && (
+          <div className="space-y-5">
+            {task.intake && (
+              <div>
+                <h3 className="mb-2 text-sm font-semibold text-[#dce0e8]">
+                  Intake
+                </h3>
+                <div className="space-y-3 rounded-[7px] border border-[#24262b] bg-[#17181b] p-3">
+                  <div className="grid gap-2 text-sm">
+                    <div className="flex justify-between gap-4">
+                      <span className="text-[#777d88]">Project</span>
+                      <span className="min-w-0 truncate text-right text-[#cfd2da]">
+                        {task.intake.project ?? 'Current workspace'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <span className="text-[#777d88]">Imported</span>
+                      <span className="text-right text-[#cfd2da]">
+                        {new Date(task.intake.importedAt).toLocaleString([], {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
+                    </div>
+                  </div>
+                  {task.intake.contextTags.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {task.intake.contextTags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="inline-flex h-7 items-center rounded-[5px] border border-[#2a2c31] bg-[#202227] px-2 text-xs font-semibold text-[#9ca1ad]"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <pre className="max-h-40 overflow-auto rounded-[6px] border border-[#24262b] bg-[#101113] p-3 font-ibm-plex-mono text-xs leading-5 text-[#8d939f]">
+                    {task.intake.rawPayload}
+                  </pre>
+                </div>
+              </div>
+            )}
+
+            <div>
+              <h3 className="mb-2 text-sm font-semibold text-[#dce0e8]">
+                Context files
+              </h3>
+              <div className="space-y-2">
+                {getTaskRunContextFiles(contextFiles, task).map((file) => (
+                  <div
+                    key={file}
+                    className="flex items-center gap-2 rounded-[6px] border border-[#24262b] bg-[#17181b] px-3 py-2 text-sm text-[#aeb3bd]"
+                  >
+                    <FileTextIcon
+                      className="size-4 text-[#777d88]"
+                      weight="bold"
+                    />
+                    <span className="min-w-0 truncate">{file}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {dependencyItems.length > 0 && (
+              <div>
+                <h3 className="mb-2 text-sm font-semibold text-[#dce0e8]">
+                  Dependencies
+                </h3>
+                <div className="space-y-2">
+                  {dependencyItems.map((item) => (
+                    <div
+                      key={item.key}
+                      className="flex items-center gap-2 rounded-[6px] border border-[#24262b] bg-[#17181b] px-3 py-2 text-sm text-[#aeb3bd]"
+                    >
+                      <GitBranchIcon
+                        className="size-4 text-[#58b957]"
+                        weight="bold"
+                      />
+                      <span className="font-ibm-plex-mono text-xs">
+                        {item.task?.key ?? item.key}
+                      </span>
+                      {item.task && (
+                        <span className="min-w-0 truncate">
+                          {item.task.title}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {activeDetailTab === 'run' && (
           <div>
           <h3 className="mb-2 text-sm font-semibold text-[#dce0e8]">
@@ -2861,9 +3082,34 @@ function TaskDetailPanel({
         </div>
         )}
 
+        {activeDetailTab === 'files' && (
+          <div>
+            <h3 className="mb-2 text-sm font-semibold text-[#dce0e8]">
+              Files changed
+            </h3>
+            {fileChanges.length > 0 ? (
+              <div className="space-y-3">
+                {fileChanges.map((change) => (
+                  <FileChangeCard key={change.path} change={change} />
+                ))}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 rounded-[6px] border border-[#24262b] bg-[#17181b] px-3 py-2 text-sm text-[#8d939f]">
+                <FileTextIcon
+                  className="size-4 text-[#777d88]"
+                  weight="bold"
+                />
+                No files changed yet
+              </div>
+            )}
+          </div>
+        )}
+
         {activeDetailTab === 'chat' && (
           <div>
-          <h3 className="mb-2 text-sm font-semibold text-[#dce0e8]">Chat</h3>
+          <h3 className="mb-2 text-sm font-semibold text-[#dce0e8]">
+            Chat history
+          </h3>
           <form
             className="mb-3 space-y-2"
             onSubmit={(event) => {
@@ -2927,19 +3173,103 @@ function TaskDetailPanel({
         </div>
         )}
 
-        {activeDetailTab === 'history' && (
+        {activeDetailTab === 'github' && (
+          <div className="space-y-4">
+            <div>
+              <h3 className="mb-2 text-sm font-semibold text-[#dce0e8]">
+                GitHub / PR
+              </h3>
+              <div className="grid gap-3 text-sm">
+                {[
+                  ['Repository', `${repository.owner}/${repository.name}`],
+                  ['Default branch', repository.defaultBranch],
+                  ['Working branch', task.branch ?? 'Not created'],
+                  ['Pull request', task.pr ?? 'Not opened'],
+                  [
+                    'Merge state',
+                    task.mergedAt
+                      ? `Merged ${new Date(task.mergedAt).toLocaleDateString()}`
+                      : task.approvalStatus === 'approved'
+                        ? 'Approved for merge'
+                        : 'Waiting',
+                  ],
+                  ['Rollback PR', task.rollbackPr ?? 'Not opened'],
+                ].map(([label, value]) => (
+                  <div
+                    key={label}
+                    className="flex items-center justify-between gap-4"
+                  >
+                    <span className="text-[#777d88]">{label}</span>
+                    <span className="min-w-0 truncate text-right text-[#cfd2da]">
+                      {value}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {pullRequestUrl ? (
+              <a
+                href={pullRequestUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="flex h-9 items-center justify-center gap-2 rounded-[6px] border border-[#2a2c31] bg-[#202227] px-3 text-xs font-semibold text-[#cfd2da] transition-colors hover:border-[#3a3d46]"
+              >
+                <GithubLogoIcon className="size-4" weight="bold" />
+                Open pull request
+              </a>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onOpenTaskPullRequest(task.id)}
+                className="flex h-9 items-center justify-center gap-2 rounded-[6px] border border-[#31553a] bg-[#172219] px-3 text-xs font-semibold text-[#78d16d] transition-colors hover:border-[#427049]"
+              >
+                <GitPullRequestIcon className="size-4" weight="bold" />
+                Open draft PR
+              </button>
+            )}
+          </div>
+        )}
+
+        {activeDetailTab === 'settings' && (
           <div>
           <h3 className="mb-2 text-sm font-semibold text-[#dce0e8]">
-            Activity
+            Settings
           </h3>
-          <div className="space-y-3">
-            {getTaskActivity(task).map((entry) => (
-              <div key={entry} className="flex gap-2 text-sm text-[#8d939f]">
-                <ClockIcon className="mt-0.5 size-4 shrink-0 text-[#777d88]" />
-                {entry}
-              </div>
-            ))}
-          </div>
+            <div className="space-y-3 rounded-[7px] border border-[#24262b] bg-[#17181b] p-3 text-sm">
+              {[
+                ['Assigned agent', getTaskAgent(task).name],
+                ['Reviewer', getTaskReviewer(task).name],
+                [
+                  'Human review',
+                  task.requiresHumanReview === false ? 'Optional' : 'Required',
+                ],
+                [
+                  'Run connectors',
+                  getTaskRunConnectorIds(task)
+                    .map((connectorId) => connectors[connectorId].name)
+                    .join(', '),
+                ],
+                ['Context files', String(getTaskRunContextFiles(contextFiles, task).length)],
+              ].map(([label, value]) => (
+                <div
+                  key={label}
+                  className="flex items-center justify-between gap-4"
+                >
+                  <span className="text-[#777d88]">{label}</span>
+                  <span className="min-w-0 truncate text-right text-[#cfd2da]">
+                    {value}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsEditing(true)}
+              className="mt-3 flex h-9 w-full items-center justify-center gap-2 rounded-[6px] border border-[#2a2c31] bg-[#202227] px-3 text-xs font-semibold text-[#cfd2da] transition-colors hover:border-[#3a3d46]"
+            >
+              <PencilSimpleIcon className="size-4" weight="bold" />
+              Edit task settings
+            </button>
         </div>
         )}
       </div>
@@ -2966,6 +3296,7 @@ function WorkspaceTasks({
   onStartAgentRun,
   onUpdateTask,
   projectName,
+  repository,
   taskView,
   onTaskViewChange,
   selectedTaskId,
@@ -3002,6 +3333,7 @@ function WorkspaceTasks({
   onStartAgentRun: (taskId: string) => string | null;
   onUpdateTask: (taskId: string, input: KavbanUpdateTaskInput) => boolean;
   projectName: string;
+  repository: Project['repository'];
   taskView: TaskView;
   onTaskViewChange: (view: TaskView) => void;
   selectedTaskId: string;
@@ -3365,6 +3697,7 @@ function WorkspaceTasks({
           onStartAgentRun={onStartAgentRun}
           onUpdateTask={onUpdateTask}
           projectTasks={tasks}
+          repository={repository}
           task={selectedTask}
         />
       )}
@@ -4156,6 +4489,7 @@ function WorkspaceView({
         onStartAgentRun={onStartAgentRun}
         onUpdateTask={onUpdateTask}
         projectName={project.name}
+        repository={project.repository}
         taskView={taskView}
         onTaskViewChange={onTaskViewChange}
         selectedTaskId={selectedTaskId}

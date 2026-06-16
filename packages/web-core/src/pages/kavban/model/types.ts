@@ -169,6 +169,14 @@ export type KavbanReviewReport = {
   createdAt: string;
 };
 
+export type KavbanTaskFileChange = {
+  path: string;
+  status: 'added' | 'modified' | 'deleted';
+  additions: number;
+  deletions: number;
+  summary: string;
+};
+
 export type KavbanTaskComment = {
   id: string;
   actor: KavbanAgentId | 'human';
@@ -201,6 +209,7 @@ export type KavbanTask = {
   testStatus?: KavbanCheckStatus | 'not-run';
   reviewReports?: KavbanReviewReport[];
   reviewStatus?: KavbanReviewStatus;
+  fileChanges?: KavbanTaskFileChange[];
   approvalStatus?: KavbanApprovalStatus;
   mergedAt?: string;
   rollbackPr?: string;

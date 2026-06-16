@@ -164,6 +164,22 @@ const projectTasks: KavbanTask[] = [
     ],
     dependencies: ['KAV-122'],
     contextFiles: ['agent-rules.md', 'review-checklist.md'],
+    fileChanges: [
+      {
+        path: 'packages/web-core/src/pages/kavban/model/useKavbanLocalStore.ts',
+        status: 'modified',
+        additions: 78,
+        deletions: 12,
+        summary: 'Created the agent-run lock, prompt, and event updates.',
+      },
+      {
+        path: 'packages/web-core/src/pages/kavban/KavbanDashboard.tsx',
+        status: 'modified',
+        additions: 132,
+        deletions: 28,
+        summary: 'Added the manual run controls and run-log panel.',
+      },
+    ],
     agentRuns: [
       {
         id: 'run-kav-000123-seed',
@@ -251,6 +267,22 @@ const projectTasks: KavbanTask[] = [
     ],
     dependencies: [],
     contextFiles: ['review-checklist.md'],
+    fileChanges: [
+      {
+        path: 'packages/web-core/src/pages/kavban/KavbanDashboard.tsx',
+        status: 'modified',
+        additions: 92,
+        deletions: 20,
+        summary: 'Added AI review status, report cards, and review actions.',
+      },
+      {
+        path: 'packages/web-core/src/pages/kavban/model/types.ts',
+        status: 'modified',
+        additions: 24,
+        deletions: 0,
+        summary: 'Extended task schema with review report metadata.',
+      },
+    ],
     reviewReports: [
       {
         id: 'review-kav-000124-seed',
@@ -333,6 +365,22 @@ const projectTasks: KavbanTask[] = [
     ],
     dependencies: [],
     contextFiles: ['task-history.md'],
+    fileChanges: [
+      {
+        path: 'packages/web-core/src/pages/kavban/model/useKavbanLocalStore.ts',
+        status: 'modified',
+        additions: 61,
+        deletions: 8,
+        summary: 'Recorded PR and approval events in task history.',
+      },
+      {
+        path: 'packages/web-core/src/pages/kavban/model/notifications.ts',
+        status: 'added',
+        additions: 44,
+        deletions: 0,
+        summary: 'Mapped GitHub events into inbox notifications.',
+      },
+    ],
     events: [
       {
         id: 'evt-kav-126-pr',

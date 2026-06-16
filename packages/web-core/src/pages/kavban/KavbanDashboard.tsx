@@ -978,16 +978,19 @@ function WaitingPill({ summary }: { summary: TaskBlockerSummary }) {
 function QueueMonitor({
   activeRunTasks,
   aiReviewTasks,
+  fixRequiredTasks,
   humanReviewTasks,
   mergeReadyTasks,
   prReadyTasks,
   onDismissSummary,
   onCreateAiReview,
   onMergeTask,
+  onMoveTask,
   onOpenTaskPullRequest,
   onRecordActiveRunCheck,
   onRecordHumanReview,
   onSelectTask,
+  onStartAgentRun,
   queueSummary,
   readyItems,
   runnableCount,
@@ -995,6 +998,7 @@ function QueueMonitor({
 }: {
   activeRunTasks: Task[];
   aiReviewTasks: Task[];
+  fixRequiredTasks: Task[];
   humanReviewTasks: Task[];
   mergeReadyTasks: Task[];
   prReadyTasks: Task[];
@@ -1004,6 +1008,7 @@ function QueueMonitor({
     input?: KavbanCreateAiReviewInput
   ) => string | null;
   onMergeTask: (taskId: string) => boolean;
+  onMoveTask: (taskId: string, status: TaskStatus) => boolean;
   onOpenTaskPullRequest: (taskId: string) => string | null;
   onRecordActiveRunCheck: (
     taskId: string,
@@ -1015,6 +1020,7 @@ function QueueMonitor({
     input: KavbanRecordHumanReviewInput
   ) => boolean;
   onSelectTask: (taskId: string) => void;
+  onStartAgentRun: (taskId: string) => string | null;
   queueSummary: string;
   readyItems: QueueTaskItem[];
   runnableCount: number;
@@ -1022,6 +1028,7 @@ function QueueMonitor({
 }) {
   const hasActiveRuns = activeRunTasks.length > 0;
   const hasAiReviewTasks = aiReviewTasks.length > 0;
+  const hasFixRequiredTasks = fixRequiredTasks.length > 0;
   const hasHumanReviewTasks = humanReviewTasks.length > 0;
   const hasMergeReadyTasks = mergeReadyTasks.length > 0;
   const hasPrReadyTasks = prReadyTasks.length > 0;
@@ -1051,6 +1058,11 @@ function QueueMonitor({
       label: 'AI review',
       value: aiReviewTasks.length,
       tone: aiReviewTasks.length > 0 ? 'text-[#d6cdfd]' : 'text-[#777d88]',
+    },
+    {
+      label: 'Fixes',
+      value: fixRequiredTasks.length,
+      tone: fixRequiredTasks.length > 0 ? 'text-[#f26d6d]' : 'text-[#777d88]',
     },
     {
       label: 'Human review',
@@ -1091,7 +1103,7 @@ function QueueMonitor({
               </button>
             )}
           </div>
-          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4 xl:grid-cols-8">
+          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4 xl:grid-cols-9">
             {stats.map((stat) => (
               <div
                 key={stat.label}
@@ -1275,10 +1287,65 @@ function QueueMonitor({
             </div>
           )}
 
-          {hasHumanReviewTasks && (
+          {hasFixRequiredTasks && (
             <div
               className={cn(
                 (hasReadyItems || hasActiveRuns || hasAiReviewTasks) &&
+                  'mt-2 border-t border-[#24262b] pt-2'
+              )}
+            >
+              <div className="mb-1 px-2 text-[11px] font-semibold text-[#777d88]">
+                Fix Required
+              </div>
+              <div className="space-y-1">
+                {fixRequiredTasks.slice(0, 4).map((task) => (
+                  <div
+                    key={task.id}
+                    className="grid min-h-10 w-full grid-cols-[72px_minmax(0,1fr)_auto_auto_auto] items-center gap-2 rounded-[6px] px-2 text-xs transition-colors hover:bg-[#202227]"
+                  >
+                    <span className="font-ibm-plex-mono text-[#777d88]">
+                      {task.key}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => onSelectTask(task.id)}
+                      className="min-w-0 truncate text-left font-semibold text-[#cfd2da]"
+                    >
+                      {task.title}
+                    </button>
+                    <span className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-[5px] border border-[#553131] bg-[#211719] px-2 text-xs font-medium text-[#f26d6d]">
+                      <XIcon className="size-3.5" weight="bold" />
+                      Fix
+                    </span>
+                    <button
+                      type="button"
+                      aria-label={`Rerun agent fix for ${task.key}`}
+                      onClick={() => onStartAgentRun(task.id)}
+                      className="flex size-6 shrink-0 items-center justify-center rounded-[5px] border border-[#334b70] bg-[#141c2a] text-[#8bbcff] transition-colors hover:border-[#43618f]"
+                    >
+                      <TerminalIcon className="size-3.5" weight="bold" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Return ${task.key} to AI review`}
+                      onClick={() => onMoveTask(task.id, 'ai-review')}
+                      className="flex size-6 shrink-0 items-center justify-center rounded-[5px] border border-[#3b334f] bg-[#1f1b2a] text-[#d6cdfd] transition-colors hover:border-[#51456b]"
+                    >
+                      <SparkleIcon className="size-3.5" weight="bold" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {hasHumanReviewTasks && (
+            <div
+              className={cn(
+                (hasReadyItems ||
+                  hasActiveRuns ||
+                  hasAiReviewTasks ||
+                  hasFixRequiredTasks) &&
                   'mt-2 border-t border-[#24262b] pt-2'
               )}
             >
@@ -1343,6 +1410,7 @@ function QueueMonitor({
                 (hasReadyItems ||
                   hasActiveRuns ||
                   hasAiReviewTasks ||
+                  hasFixRequiredTasks ||
                   hasHumanReviewTasks) &&
                   'mt-2 border-t border-[#24262b] pt-2'
               )}
@@ -1390,6 +1458,7 @@ function QueueMonitor({
                 (hasReadyItems ||
                   hasActiveRuns ||
                   hasAiReviewTasks ||
+                  hasFixRequiredTasks ||
                   hasHumanReviewTasks ||
                   hasPrReadyTasks) &&
                   'mt-2 border-t border-[#24262b] pt-2'
@@ -1432,6 +1501,7 @@ function QueueMonitor({
           {!hasReadyItems &&
             !hasActiveRuns &&
             !hasAiReviewTasks &&
+            !hasFixRequiredTasks &&
             !hasHumanReviewTasks &&
             !hasPrReadyTasks &&
             !hasMergeReadyTasks && (
@@ -4854,6 +4924,10 @@ function WorkspaceTasks({
       ),
     [tasks]
   );
+  const fixRequiredTasks = useMemo(
+    () => tasks.filter((task) => task.status === 'fix-required'),
+    [tasks]
+  );
   const humanReviewTasks = useMemo(
     () => tasks.filter((task) => task.status === 'human-review'),
     [tasks]
@@ -5063,12 +5137,14 @@ function WorkspaceTasks({
         <QueueMonitor
           activeRunTasks={activeRunTasks}
           aiReviewTasks={aiReviewTasks}
+          fixRequiredTasks={fixRequiredTasks}
           humanReviewTasks={humanReviewTasks}
           mergeReadyTasks={mergeReadyTasks}
           prReadyTasks={prReadyTasks}
           onDismissSummary={() => setQueueSummary('')}
           onCreateAiReview={onCreateAiReview}
           onMergeTask={onMergeTask}
+          onMoveTask={onMoveTask}
           onOpenTaskPullRequest={onOpenTaskPullRequest}
           onRecordActiveRunCheck={(taskId, runId, status) =>
             onRecordRunCheck(taskId, runId, {
@@ -5082,6 +5158,7 @@ function WorkspaceTasks({
           }
           onRecordHumanReview={onRecordHumanReview}
           onSelectTask={handleSelectTask}
+          onStartAgentRun={onStartAgentRun}
           queueSummary={queueSummary}
           readyItems={readyQueueItems}
           runnableCount={runnableReadyTasks.length}

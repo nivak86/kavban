@@ -220,6 +220,76 @@ function TestStatusPill({ status }: { status: Task['testStatus'] }) {
   );
 }
 
+function ReviewStatusPill({ status }: { status: Task['reviewStatus'] }) {
+  if (!status) {
+    return null;
+  }
+
+  const styles = {
+    passed: 'border-[#31553a] bg-[#172219] text-[#78d16d]',
+    'needs-human': 'border-[#3b334f] bg-[#1f1b2a] text-[#d6cdfd]',
+    'changes-requested': 'border-[#553131] bg-[#25191b] text-[#f26d6d]',
+  } satisfies Record<NonNullable<Task['reviewStatus']>, string>;
+  const labels = {
+    passed: 'Review passed',
+    'needs-human': 'Needs human',
+    'changes-requested': 'Changes requested',
+  } satisfies Record<NonNullable<Task['reviewStatus']>, string>;
+
+  return (
+    <span
+      className={cn(
+        'inline-flex h-6 items-center gap-1.5 rounded-[5px] border px-2 text-xs font-medium',
+        styles[status]
+      )}
+    >
+      <ShieldCheckIcon className="size-3.5" weight="bold" />
+      {labels[status]}
+    </span>
+  );
+}
+
+function ReviewReportCard({
+  report,
+}: {
+  report: NonNullable<Task['reviewReports']>[number];
+}) {
+  const reviewer = kavbanAgents[report.reviewerId];
+
+  return (
+    <div className="rounded-[7px] border border-[#24262b] bg-[#17181b] p-3">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <AgentAvatar agent={reviewer} />
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-[#dce0e8]">
+              {reviewer.name}
+            </p>
+            <p className="font-ibm-plex-mono text-[11px] uppercase text-[#6f7682]">
+              {report.status}
+            </p>
+          </div>
+        </div>
+        <span className="shrink-0 font-ibm-plex-mono text-[11px] uppercase text-[#777d88]">
+          {report.risk} risk
+        </span>
+      </div>
+      <p className="text-sm leading-6 text-[#aeb3bd]">{report.summary}</p>
+      <div className="mt-3 space-y-2">
+        {report.checks.map((check) => (
+          <div key={check} className="flex gap-2 text-xs text-[#8d939f]">
+            <CheckCircleIcon
+              className="mt-0.5 size-3.5 shrink-0 text-[#78d16d]"
+              weight="fill"
+            />
+            <span>{check}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function AgentRunCard({
   onRecordCheck,
   run,
@@ -1292,6 +1362,7 @@ function TaskCard({
           <BlockedPill count={blockingDependencies.length} />
         )}
         <TestStatusPill status={task.testStatus} />
+        <ReviewStatusPill status={task.reviewStatus} />
         {task.requiresHumanReview !== false && <HumanReviewPill />}
         {task.pr && <PrPill value={task.pr} />}
       </div>
@@ -1410,6 +1481,7 @@ function TasksList({
                   <BlockedPill count={blockingDependencies.length} />
                 )}
                 <TestStatusPill status={task.testStatus} />
+                <ReviewStatusPill status={task.reviewStatus} />
                 {task.requiresHumanReview !== false && <HumanReviewPill />}
                 {task.tags.slice(0, 2).map((tag) => (
                   <TagPill key={tag.label} tag={tag} />
@@ -1763,6 +1835,7 @@ function TaskEditForm({
 
 function TaskDetailPanel({
   contextFiles,
+  onCreateAiReview,
   onDeleteTask,
   onMoveTask,
   onRecordRunCheck,
@@ -1772,6 +1845,7 @@ function TaskDetailPanel({
   task,
 }: {
   contextFiles: Project['contextFiles'];
+  onCreateAiReview: (taskId: string) => string | null;
   onDeleteTask: (taskId: string) => boolean;
   onMoveTask: (taskId: string, status: TaskStatus) => boolean;
   onRecordRunCheck: (
@@ -1794,6 +1868,11 @@ function TaskDetailPanel({
   const agentRuns = task.agentRuns ?? [];
   const isRunAgentBlocked =
     task.status === 'done' || blockingDependencies.length > 0;
+  const reviewReports = task.reviewReports ?? [];
+  const canRunAiReview =
+    task.testStatus === 'passed' &&
+    task.status !== 'done' &&
+    reviewReports.length === 0;
 
   useEffect(() => {
     setIsConfirmingDelete(false);
@@ -1905,6 +1984,17 @@ function TaskDetailPanel({
           </button>
         )}
 
+        {canRunAiReview && (
+          <button
+            type="button"
+            onClick={() => onCreateAiReview(task.id)}
+            className="flex h-9 w-full items-center justify-center gap-2 rounded-[6px] border border-[#334b70] bg-[#141c2a] px-3 text-xs font-semibold text-[#8bbcff] transition-colors hover:border-[#43618f]"
+          >
+            <SparkleIcon className="size-4" weight="bold" />
+            Run AI review
+          </button>
+        )}
+
         {blockingDependencies.length > 0 && (
           <div className="rounded-[7px] border border-[#553131] bg-[#211719] p-3">
             <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#f26d6d]">
@@ -1937,6 +2027,7 @@ function TaskDetailPanel({
             ['Reviewer', getTaskReviewer(task).name],
             ['Branch', task.branch ?? 'Not planned'],
             ['Tests', task.testStatus ?? 'Not run'],
+            ['Review', task.reviewStatus ?? 'Not reviewed'],
             [
               'Human review',
               task.requiresHumanReview === false ? 'Optional' : 'Required',
@@ -2024,6 +2115,24 @@ function TaskDetailPanel({
 
         <div>
           <h3 className="mb-2 text-sm font-semibold text-[#dce0e8]">
+            AI review
+          </h3>
+          {reviewReports.length > 0 ? (
+            <div className="space-y-3">
+              {reviewReports.map((report) => (
+                <ReviewReportCard key={report.id} report={report} />
+              ))}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 rounded-[6px] border border-[#24262b] bg-[#17181b] px-3 py-2 text-sm text-[#8d939f]">
+              <SparkleIcon className="size-4 text-[#777d88]" weight="bold" />
+              No AI review yet
+            </div>
+          )}
+        </div>
+
+        <div>
+          <h3 className="mb-2 text-sm font-semibold text-[#dce0e8]">
             Activity
           </h3>
           <div className="space-y-3">
@@ -2043,6 +2152,7 @@ function TaskDetailPanel({
 function WorkspaceTasks({
   agentRouting,
   contextFiles,
+  onCreateAiReview,
   onCreateTask,
   onDeleteTask,
   onMoveTask,
@@ -2058,6 +2168,7 @@ function WorkspaceTasks({
 }: {
   agentRouting: KavbanAgentRoutingInput;
   contextFiles: Project['contextFiles'];
+  onCreateAiReview: (taskId: string) => string | null;
   onCreateTask: (input: KavbanCreateTaskInput) => string | null;
   onDeleteTask: (taskId: string) => boolean;
   onMoveTask: (taskId: string, status: TaskStatus) => boolean;
@@ -2201,6 +2312,7 @@ function WorkspaceTasks({
       {selectedTask && (
         <TaskDetailPanel
           contextFiles={contextFiles}
+          onCreateAiReview={onCreateAiReview}
           onDeleteTask={handleDeleteTask}
           onMoveTask={onMoveTask}
           onRecordRunCheck={onRecordRunCheck}
@@ -2902,6 +3014,7 @@ function WorkspaceView({
   onAgentRoutingChange,
   onBriefChange,
   onCreateContextFile,
+  onCreateAiReview,
   onCreateProject,
   onCreateTask,
   onDeleteContextFile,
@@ -2928,6 +3041,7 @@ function WorkspaceView({
   onAgentRoutingChange: (input: KavbanAgentRoutingInput) => boolean;
   onBriefChange: (value: string) => void;
   onCreateContextFile: (input: KavbanContextFileInput) => boolean;
+  onCreateAiReview: (taskId: string) => string | null;
   onCreateProject: (name: string) => void;
   onCreateTask: (input: KavbanCreateTaskInput) => string | null;
   onDeleteContextFile: (path: string) => boolean;
@@ -2984,6 +3098,7 @@ function WorkspaceView({
           <WorkspaceTasks
             agentRouting={project.agentRouting ?? kavbanDefaultAgentRouting}
             contextFiles={project.contextFiles}
+            onCreateAiReview={onCreateAiReview}
             onCreateTask={onCreateTask}
             onDeleteTask={onDeleteTask}
             onMoveTask={onMoveTask}
@@ -3112,6 +3227,7 @@ function ProfileView({ profile }: { profile: Profile }) {
 export function KavbanDashboard() {
   const {
     activeProjectId,
+    createAiReview,
     createContextFile,
     createProject,
     createTask,
@@ -3191,6 +3307,7 @@ export function KavbanDashboard() {
               connectors={project.connectors}
               onAgentRoutingChange={updateAgentRouting}
               onBriefChange={updateProjectBrief}
+              onCreateAiReview={createAiReview}
               onCreateContextFile={createContextFile}
               onCreateProject={createProject}
               onCreateTask={createTask}

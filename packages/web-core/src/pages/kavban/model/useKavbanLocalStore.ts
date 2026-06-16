@@ -14,6 +14,7 @@ import type {
   KavbanConnectorId,
   KavbanContextFile,
   KavbanProject,
+  KavbanReviewStatus,
   KavbanTask,
   KavbanTaskEventKind,
   KavbanTaskPriority,
@@ -849,6 +850,88 @@ export function useKavbanLocalStore() {
     [activeProject.tasks]
   );
 
+  const createAiReview = useCallback(
+    (taskId: string) => {
+      const taskToReview = activeProject.tasks.find(
+        (task) => task.id === taskId
+      );
+
+      if (!taskToReview || taskToReview.testStatus !== 'passed') {
+        return null;
+      }
+
+      const updatedAt = nowIso();
+      const reportId = `review-${taskId}-${Date.now().toString(36)}`;
+      const reviewStatus: KavbanReviewStatus =
+        taskToReview.requiresHumanReview === false ? 'passed' : 'needs-human';
+      const nextStatus: KavbanTaskStatus =
+        taskToReview.requiresHumanReview === false ? 'done' : 'human-review';
+      const reviewer = kavbanAgents[taskToReview.reviewerId];
+      const report = {
+        id: reportId,
+        reviewerId: taskToReview.reviewerId,
+        status: reviewStatus,
+        summary: `${reviewer.name} reviewed ${taskToReview.key}; tests passed and the branch is ready for ${
+          nextStatus === 'done' ? 'completion' : 'human review'
+        }.`,
+        risk:
+          taskToReview.priority === 'High'
+            ? ('medium' as const)
+            : ('low' as const),
+        checks: [
+          'Task instructions were matched against the implementation intent.',
+          'Latest agent run has a passing check result.',
+          'Context files and dependency blockers were reviewed.',
+          'Branch scope is ready for the next approval step.',
+        ],
+        createdAt: updatedAt,
+      };
+
+      setState((current) => ({
+        ...current,
+        projects: current.projects.map((project) =>
+          project.id === current.activeProjectId
+            ? {
+                ...project,
+                tasks: project.tasks.map((task) =>
+                  task.id === taskId
+                    ? {
+                        ...task,
+                        status: nextStatus,
+                        state: taskStateByStatus[nextStatus],
+                        reviewStatus,
+                        reviewReports: [report, ...(task.reviewReports ?? [])],
+                        events: [
+                          ...task.events,
+                          {
+                            id: `evt-${reportId}-started`,
+                            kind: 'review-started',
+                            actor: task.reviewerId,
+                            summary: `${reviewer.name} started AI review.`,
+                            createdAt: updatedAt,
+                          },
+                          {
+                            id: `evt-${reportId}-completed`,
+                            kind: 'ai-review-completed',
+                            actor: task.reviewerId,
+                            summary: `${reviewer.name} completed AI review with ${reviewStatus}.`,
+                            createdAt: updatedAt,
+                          },
+                        ],
+                      }
+                    : task
+                ),
+              }
+            : project
+        ),
+        updatedAt,
+      }));
+
+      return reportId;
+    },
+    [activeProject.tasks]
+  );
+
   const moveTask = useCallback(
     (taskId: string, status: KavbanTaskStatus) => {
       const taskToMove = activeProject.tasks.find((task) => task.id === taskId);
@@ -923,6 +1006,7 @@ export function useKavbanLocalStore() {
   return {
     activeProjectId: state.activeProjectId,
     createContextFile,
+    createAiReview,
     createProject,
     createTask,
     deleteContextFile,

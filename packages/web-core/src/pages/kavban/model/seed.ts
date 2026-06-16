@@ -222,12 +222,30 @@ const projectTasks: KavbanTask[] = [
     reviewerId: 'codex',
     branch: 'kav/kav-000124-ai-review',
     pr: '#55249',
+    testStatus: 'passed',
+    reviewStatus: 'changes-requested',
     tags: [
       { label: 'Review', color: '#6aa7ff' },
       { label: 'Safety', color: '#f26d6d' },
     ],
     dependencies: [],
     contextFiles: ['review-checklist.md'],
+    reviewReports: [
+      {
+        id: 'review-kav-000124-seed',
+        reviewerId: 'codex',
+        status: 'changes-requested',
+        summary:
+          'Codex reviewer requested a smaller diff and clearer test evidence before human approval.',
+        risk: 'medium',
+        checks: [
+          'Diff scope needs one follow-up pass.',
+          'Test command must be attached to the run log.',
+          'Security-sensitive files were not modified.',
+        ],
+        createdAt: '2026-06-16T09:34:00.000Z',
+      },
+    ],
     events: [
       {
         id: 'evt-kav-124-review',
@@ -235,6 +253,13 @@ const projectTasks: KavbanTask[] = [
         actor: 'codex',
         summary: 'Reviewer is checking diff scope and test output.',
         createdAt: '2026-06-16T09:30:00.000Z',
+      },
+      {
+        id: 'evt-kav-124-review-completed',
+        kind: 'ai-review-completed',
+        actor: 'codex',
+        summary: 'Codex completed AI review with changes-requested.',
+        createdAt: '2026-06-16T09:34:00.000Z',
       },
     ],
   },

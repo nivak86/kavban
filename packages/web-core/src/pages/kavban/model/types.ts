@@ -31,6 +31,7 @@ export type KavbanTaskEventKind =
   | 'tests-passed'
   | 'tests-failed'
   | 'review-started'
+  | 'ai-review-completed'
   | 'approval-needed'
   | 'pr-opened';
 
@@ -105,6 +106,18 @@ export type KavbanAgentRun = {
   updatedAt: string;
 };
 
+export type KavbanReviewStatus = 'passed' | 'changes-requested' | 'needs-human';
+
+export type KavbanReviewReport = {
+  id: string;
+  reviewerId: KavbanAgentId;
+  status: KavbanReviewStatus;
+  summary: string;
+  risk: 'low' | 'medium' | 'high';
+  checks: string[];
+  createdAt: string;
+};
+
 export type KavbanTask = {
   id: string;
   key: string;
@@ -123,6 +136,8 @@ export type KavbanTask = {
   contextFiles: string[];
   agentRuns?: KavbanAgentRun[];
   testStatus?: KavbanCheckStatus | 'not-run';
+  reviewReports?: KavbanReviewReport[];
+  reviewStatus?: KavbanReviewStatus;
   events: KavbanTaskEvent[];
 };
 

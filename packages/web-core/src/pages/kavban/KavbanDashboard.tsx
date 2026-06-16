@@ -119,6 +119,31 @@ const getTaskAgent = (task: Task) => kavbanAgents[task.agentId];
 const getTaskReviewer = (task: Task) => kavbanAgents[task.reviewerId];
 const getTaskActivity = (task: Task) =>
   task.events.map((event) => event.summary);
+const getLatestTaskChangeRequest = (task: Task) => {
+  const event = [...task.events]
+    .reverse()
+    .find((item) => item.kind === 'changes-requested');
+
+  if (event) {
+    return {
+      summary: event.summary,
+      createdAt: event.createdAt,
+    };
+  }
+
+  const reviewReport = (task.reviewReports ?? []).find(
+    (report) => report.status === 'changes-requested'
+  );
+
+  if (reviewReport) {
+    return {
+      summary: reviewReport.summary,
+      createdAt: reviewReport.createdAt,
+    };
+  }
+
+  return null;
+};
 const getDependencyItems = (task: Task, projectTasks: Task[]) =>
   task.dependencies.map((dependency) => ({
     key: dependency,
@@ -1993,10 +2018,31 @@ function TaskDetailPanel({
   const isRunAgentBlocked =
     task.status === 'done' || blockingDependencies.length > 0;
   const reviewReports = task.reviewReports ?? [];
+  const latestReviewReport = reviewReports[0];
+  const latestRunUpdatedAt = agentRuns[0]?.updatedAt;
+  const latestChangeRequest = getLatestTaskChangeRequest(task);
+  const latestRunStartedAt = agentRuns[0]?.createdAt;
+  const hasUnansweredChangeRequest = Boolean(
+    latestChangeRequest &&
+      (!latestRunStartedAt ||
+        new Date(latestRunStartedAt).getTime() <=
+          new Date(latestChangeRequest.createdAt).getTime())
+  );
+  const canRerunAgent =
+    hasUnansweredChangeRequest &&
+    task.status !== 'done' &&
+    task.status !== 'ready';
+  const needsFreshAiReview =
+    !latestReviewReport ||
+    Boolean(
+      latestRunUpdatedAt &&
+        new Date(latestRunUpdatedAt).getTime() >
+          new Date(latestReviewReport.createdAt).getTime()
+    );
   const canRunAiReview =
     task.testStatus === 'passed' &&
     task.status !== 'done' &&
-    reviewReports.length === 0;
+    needsFreshAiReview;
 
   useEffect(() => {
     setCommentText('');
@@ -2075,6 +2121,18 @@ function TaskDetailPanel({
       </div>
 
       <div className="space-y-5 px-5 py-5">
+        {hasUnansweredChangeRequest && latestChangeRequest && (
+          <div className="rounded-[7px] border border-[#553131] bg-[#211719] p-3">
+            <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#f26d6d]">
+              <XIcon className="size-4" weight="bold" />
+              Changes requested
+            </div>
+            <p className="text-sm leading-5 text-[#cfa0a0]">
+              {latestChangeRequest.summary}
+            </p>
+          </div>
+        )}
+
         {task.status === 'ready' && (
           <button
             type="button"
@@ -2092,7 +2150,24 @@ function TaskDetailPanel({
           </button>
         )}
 
-        {task.status !== 'ready' && advanceAction && (
+        {canRerunAgent && (
+          <button
+            type="button"
+            disabled={isRunAgentBlocked}
+            onClick={() => onStartAgentRun(task.id)}
+            className={cn(
+              'flex h-9 w-full items-center justify-center gap-2 rounded-[6px] border px-3 text-xs font-semibold transition-colors',
+              isRunAgentBlocked
+                ? 'cursor-not-allowed border-[#553131] bg-[#211719] text-[#f26d6d]'
+                : 'border-[#334b70] bg-[#141c2a] text-[#8bbcff] hover:border-[#43618f]'
+            )}
+          >
+            <TerminalIcon className="size-4" weight="bold" />
+            {isRunAgentBlocked ? 'Blocked' : 'Rerun agent'}
+          </button>
+        )}
+
+        {task.status !== 'ready' && advanceAction && !canRerunAgent && (
           <button
             type="button"
             disabled={isAdvanceBlocked}

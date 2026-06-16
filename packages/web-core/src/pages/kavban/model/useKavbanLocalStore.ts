@@ -192,6 +192,32 @@ function getAgentRunContextFiles(project: KavbanProject, task: KavbanTask) {
     .map((file) => file.path);
 }
 
+function getLatestChangeRequest(task: KavbanTask) {
+  const event = [...task.events]
+    .reverse()
+    .find((item) => item.kind === 'changes-requested');
+
+  if (event) {
+    return {
+      summary: event.summary,
+      createdAt: event.createdAt,
+    };
+  }
+
+  const reviewReport = (task.reviewReports ?? []).find(
+    (report) => report.status === 'changes-requested'
+  );
+
+  if (reviewReport) {
+    return {
+      summary: reviewReport.summary,
+      createdAt: reviewReport.createdAt,
+    };
+  }
+
+  return null;
+}
+
 function createAgentRunPrompt(
   project: KavbanProject,
   task: KavbanTask,
@@ -203,6 +229,10 @@ function createAgentRunPrompt(
     contextFiles.length > 0
       ? contextFiles.map((file) => `- ${file}`)
       : ['- No context files selected.'];
+  const changeRequest = getLatestChangeRequest(task);
+  const reviewFeedbackLines = changeRequest
+    ? ['', 'Review feedback:', `- ${changeRequest.summary}`]
+    : [];
 
   return [
     `Project: ${project.name}`,
@@ -214,6 +244,7 @@ function createAgentRunPrompt(
     '',
     'Instructions:',
     task.description,
+    ...reviewFeedbackLines,
     '',
     'Context files:',
     ...contextLines,
@@ -730,6 +761,7 @@ export function useKavbanLocalStore() {
       const branch =
         taskToRun.branch || createTaskBranch(taskToRun.id, taskToRun.title);
       const runContextFiles = getAgentRunContextFiles(activeProject, taskToRun);
+      const changeRequest = getLatestChangeRequest(taskToRun);
       const run = {
         id: runId,
         agentId: taskToRun.agentId,
@@ -762,6 +794,16 @@ export function useKavbanLocalStore() {
             message: 'Generated execution prompt for the assigned agent.',
             createdAt: updatedAt,
           },
+          ...(changeRequest
+            ? [
+                {
+                  id: `log-${runId}-feedback`,
+                  level: 'warning' as const,
+                  message: `Review feedback attached: ${changeRequest.summary}`,
+                  createdAt: updatedAt,
+                },
+              ]
+            : []),
         ],
         createdAt: updatedAt,
         updatedAt,
@@ -780,6 +822,7 @@ export function useKavbanLocalStore() {
                         status: 'progress',
                         state: taskStateByStatus.progress,
                         branch,
+                        testStatus: 'not-run',
                         agentRuns: [run, ...(task.agentRuns ?? [])],
                         events: [
                           ...task.events,

@@ -157,7 +157,7 @@ function AgentAvatar({ agent }: { agent: Agent }) {
 
 function TagPill({ tag }: { tag: Tag }) {
   return (
-    <span className="inline-flex h-6 items-center gap-1.5 rounded-[5px] border border-[#2a2c31] bg-[#25272b] px-2 text-xs font-medium text-[#cfd2da]">
+    <span className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-[5px] border border-[#2a2c31] bg-[#25272b] px-2 text-xs font-medium text-[#cfd2da]">
       <span
         className="size-1.5 rounded-full"
         style={{ backgroundColor: tag.color }}
@@ -178,7 +178,7 @@ function BranchPill({ value }: { value: string }) {
 
 function PrPill({ value }: { value: string }) {
   return (
-    <span className="inline-flex h-6 items-center gap-1.5 rounded-[5px] border border-[#2a2c31] bg-[#25272b] px-2 text-xs font-medium text-[#cfd2da]">
+    <span className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-[5px] border border-[#2a2c31] bg-[#25272b] px-2 text-xs font-medium text-[#cfd2da]">
       <GitPullRequestIcon className="size-3.5 text-[#58b957]" weight="bold" />
       {value}
     </span>
@@ -1330,17 +1330,17 @@ function TaskCard({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 pr-28">
-          <p className="font-ibm-plex-mono text-xs text-[#6f7682]">
+          <p className="font-ibm-plex-mono text-sm text-[#646a75]">
             {task.key}
           </p>
           <div className="mt-2 flex items-center gap-2">
             <StatusIcon task={task} />
-            <h3 className="truncate text-sm font-medium text-[#d7d9df]">
+            <h3 className="truncate text-base font-medium text-[#d7d9df]">
               {task.title}
             </h3>
           </div>
         </div>
-        <span className="absolute right-4 top-4 inline-flex h-7 max-w-[142px] items-center gap-1.5 rounded-full border border-[#2a2c31] bg-[#17181b] px-2.5 text-xs font-medium text-[#9ca1ad]">
+        <span className="absolute right-4 top-4 inline-flex h-7 max-w-[142px] items-center gap-1.5 rounded-full border border-[#2a2c31] bg-[#17181b] px-2.5 text-sm font-medium text-[#9ca1ad]">
           <span className="truncate">{task.state}</span>
           <AgentAvatar agent={getTaskAgent(task)} />
         </span>

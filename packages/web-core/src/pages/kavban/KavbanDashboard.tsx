@@ -191,6 +191,29 @@ const getMissingTaskRunConnectors = (
   getTaskRunConnectorIds(task)
     .map((connectorId) => connectors[connectorId])
     .filter((connector) => !connector.connected);
+const getTaskRunContextFiles = (
+  contextFiles: Project['contextFiles'],
+  task: Task
+) => {
+  if (task.contextFiles.length > 0) {
+    return task.contextFiles;
+  }
+
+  return contextFiles.filter((file) => file.injected).map((file) => file.path);
+};
+const getMissingTaskContextFiles = (
+  contextFiles: Project['contextFiles'],
+  task: Task
+) => {
+  const runContextFiles = getTaskRunContextFiles(contextFiles, task);
+  const projectContextPaths = new Set(contextFiles.map((file) => file.path));
+
+  if (runContextFiles.length === 0) {
+    return ['Project context pack'];
+  }
+
+  return runContextFiles.filter((path) => !projectContextPaths.has(path));
+};
 
 function StatusIcon({ task }: { task: Task }) {
   const column = workflowColumns.find((item) => item.id === task.status);
@@ -2199,6 +2222,7 @@ function TaskDetailPanel({
   const dependencyItems = getDependencyItems(task, projectTasks);
   const blockingDependencies = getBlockingDependencies(task, projectTasks);
   const missingRunConnectors = getMissingTaskRunConnectors(connectors, task);
+  const missingContextFiles = getMissingTaskContextFiles(contextFiles, task);
   const taskLockAgent = getTaskLockAgent(task);
   const isTaskLocked = Boolean(taskLockAgent);
   const advanceAction = taskAdvanceActions[task.status];
@@ -2206,16 +2230,20 @@ function TaskDetailPanel({
     advanceAction?.status === 'progress' &&
     (blockingDependencies.length > 0 ||
       isTaskLocked ||
-      missingRunConnectors.length > 0);
+      missingRunConnectors.length > 0 ||
+      missingContextFiles.length > 0);
   const agentRuns = task.agentRuns ?? [];
   const isRunAgentBlocked =
     task.status === 'done' ||
     blockingDependencies.length > 0 ||
     isTaskLocked ||
-    missingRunConnectors.length > 0;
+    missingRunConnectors.length > 0 ||
+    missingContextFiles.length > 0;
   const runBlockedLabel =
     missingRunConnectors.length > 0
       ? 'Setup connectors'
+      : missingContextFiles.length > 0
+        ? 'Setup context'
       : isTaskLocked
         ? 'Locked'
         : 'Blocked';
@@ -2383,6 +2411,26 @@ function TaskDetailPanel({
                   </span>
                 );
               })}
+            </div>
+          </div>
+        )}
+
+        {missingContextFiles.length > 0 && (
+          <div className="rounded-[7px] border border-[#553131] bg-[#211719] p-3">
+            <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#f26d6d]">
+              <FileTextIcon className="size-4" weight="bold" />
+              Missing context
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {missingContextFiles.map((path) => (
+                <span
+                  key={path}
+                  className="inline-flex h-7 items-center gap-1.5 rounded-[5px] border border-[#553131] bg-[#25191b] px-2 text-xs font-semibold text-[#f26d6d]"
+                >
+                  <FileTextIcon className="size-3.5" weight="bold" />
+                  {path}
+                </span>
+              ))}
             </div>
           </div>
         )}
@@ -2948,9 +2996,10 @@ function WorkspaceTasks({
         (task) =>
           !task.lockedBy &&
           getBlockingDependencies(task, tasks).length === 0 &&
-          getMissingTaskRunConnectors(connectors, task).length === 0
+          getMissingTaskRunConnectors(connectors, task).length === 0 &&
+          getMissingTaskContextFiles(contextFiles, task).length === 0
       ),
-    [connectors, readyTasks, tasks]
+    [connectors, contextFiles, readyTasks, tasks]
   );
   const waitingReadyTaskCount = readyTasks.length - runnableReadyTasks.length;
 
@@ -3011,7 +3060,7 @@ function WorkspaceTasks({
     if (runnableReadyTasks.length === 0) {
       setQueueSummary(
         waitingReadyTaskCount > 0
-          ? `${waitingReadyTaskCount} ready task${waitingReadyTaskCount === 1 ? '' : 's'} waiting on dependencies, locks, or connectors.`
+          ? `${waitingReadyTaskCount} ready task${waitingReadyTaskCount === 1 ? '' : 's'} waiting on dependencies, locks, connectors, or context.`
           : 'No ready tasks available.'
       );
       return;

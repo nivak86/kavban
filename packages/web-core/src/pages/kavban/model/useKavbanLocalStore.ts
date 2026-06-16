@@ -246,6 +246,19 @@ function getAgentRunContextFiles(project: KavbanProject, task: KavbanTask) {
     .map((file) => file.path);
 }
 
+function getMissingRunContextFiles(project: KavbanProject, task: KavbanTask) {
+  const runContextFiles = getAgentRunContextFiles(project, task);
+  const projectContextPaths = new Set(
+    project.contextFiles.map((file) => file.path)
+  );
+
+  if (runContextFiles.length === 0) {
+    return ['Project context pack'];
+  }
+
+  return runContextFiles.filter((path) => !projectContextPaths.has(path));
+}
+
 function getLatestChangeRequest(task: KavbanTask) {
   const event = [...task.events]
     .reverse()
@@ -1035,6 +1048,7 @@ export function useKavbanLocalStore() {
         taskToRun.status === 'done' ||
         taskToRun.lockedBy ||
         getMissingRunConnectorIds(activeProject, taskToRun).length > 0 ||
+        getMissingRunContextFiles(activeProject, taskToRun).length > 0 ||
         hasBlockingDependencies(taskToRun, activeProject.tasks)
       ) {
         return null;

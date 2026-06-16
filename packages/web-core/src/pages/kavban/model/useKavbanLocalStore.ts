@@ -27,6 +27,8 @@ export type KavbanCreateTaskInput = {
   contextFiles: string[];
 };
 
+export type KavbanUpdateTaskInput = KavbanCreateTaskInput;
+
 const taskStateByStatus: Record<KavbanTaskStatus, string> = {
   backlog: 'Draft',
   ready: 'Ready',
@@ -233,6 +235,84 @@ export function useKavbanLocalStore() {
     [activeProject]
   );
 
+  const updateTask = useCallback(
+    (taskId: string, input: KavbanUpdateTaskInput) => {
+      const trimmedTitle = input.title.trim();
+
+      if (
+        !trimmedTitle ||
+        !activeProject.tasks.some((task) => task.id === taskId)
+      ) {
+        return false;
+      }
+
+      const tagLabels = input.tagLabels
+        .map((label) => label.trim())
+        .filter(Boolean);
+      const normalizedInput = {
+        ...input,
+        title: trimmedTitle,
+        description: input.description.trim(),
+        tagLabels,
+        contextFiles: input.contextFiles.filter(Boolean),
+      };
+      const updatedAt = nowIso();
+      const eventId = `evt-${taskId}-updated-${Date.now().toString(36)}`;
+
+      setState((current) => ({
+        ...current,
+        projects: current.projects.map((project) =>
+          project.id === current.activeProjectId
+            ? {
+                ...project,
+                tasks: project.tasks.map((task) =>
+                  task.id === taskId
+                    ? {
+                        ...task,
+                        title: normalizedInput.title,
+                        description:
+                          normalizedInput.description ||
+                          'Task created manually. Add implementation notes before running an agent.',
+                        status: normalizedInput.status,
+                        state: taskStateByStatus[normalizedInput.status],
+                        priority: normalizedInput.priority,
+                        agentId: normalizedInput.agentId,
+                        reviewerId: normalizedInput.reviewerId,
+                        tags: (normalizedInput.tagLabels.length > 0
+                          ? normalizedInput.tagLabels
+                          : ['Manual task']
+                        ).map((label, index) => ({
+                          label,
+                          color: tagColors[index % tagColors.length],
+                        })),
+                        contextFiles: getTaskContextFiles(
+                          project,
+                          normalizedInput
+                        ),
+                        events: [
+                          ...task.events,
+                          {
+                            id: eventId,
+                            kind: 'task-updated',
+                            actor: 'human',
+                            summary: 'Task details updated manually.',
+                            createdAt: updatedAt,
+                          },
+                        ],
+                      }
+                    : task
+                ),
+              }
+            : project
+        ),
+        updatedAt,
+      }));
+
+      return true;
+    },
+    [activeProject]
+  );
+
   const updateConnector = useCallback(
     (
       connectorId: KavbanConnectorId,
@@ -269,5 +349,6 @@ export function useKavbanLocalStore() {
     state,
     updateConnector,
     updateProjectBrief,
+    updateTask,
   };
 }

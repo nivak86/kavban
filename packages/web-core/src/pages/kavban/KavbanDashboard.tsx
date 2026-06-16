@@ -22,6 +22,7 @@ import {
   ListChecksIcon,
   MagicWandIcon,
   MagnifyingGlassIcon,
+  PencilSimpleIcon,
   PlugsConnectedIcon,
   PlusIcon,
   RobotIcon,
@@ -33,6 +34,7 @@ import {
   TrayIcon,
   UserCircleIcon,
   UserIcon,
+  XIcon,
 } from '@phosphor-icons/react';
 import { cn } from '@/shared/lib/utils';
 import {
@@ -55,6 +57,7 @@ import type {
   KavbanTask as Task,
   KavbanTaskPriority,
   KavbanTaskStatus as TaskStatus,
+  KavbanUpdateTaskInput,
   KavbanWorkflowIconKey,
 } from './model';
 
@@ -90,6 +93,8 @@ const workflowColumns = kavbanWorkflowColumns;
 const agentOptions: KavbanAgentId[] = ['codex', 'claude'];
 const reviewerOptions: KavbanAgentId[] = ['reviewer', 'codex'];
 const taskPriorities: KavbanTaskPriority[] = ['High', 'Medium', 'Low'];
+const taskFormFieldClass =
+  'w-full rounded-[6px] border border-[#2a2c31] bg-[#111214] px-3 text-sm text-[#dce0e8] outline-none transition-colors placeholder:text-[#626874] focus:border-[#444956]';
 const getProfileFirstName = (profile: Profile) =>
   profile.displayName.split(' ')[0] || profile.displayName;
 
@@ -759,9 +764,6 @@ function TaskCreatePanel({
     );
   };
 
-  const fieldClass =
-    'w-full rounded-[6px] border border-[#2a2c31] bg-[#111214] px-3 text-sm text-[#dce0e8] outline-none transition-colors placeholder:text-[#626874] focus:border-[#444956]';
-
   return (
     <form
       className="border-b border-[#24262b] bg-[#111214] px-6 py-5"
@@ -801,7 +803,7 @@ function TaskCreatePanel({
               id="task-title"
               value={title}
               onChange={(event) => setTitle(event.target.value)}
-              className={`${fieldClass} h-9`}
+              className={`${taskFormFieldClass} h-9`}
               placeholder="Add a task title"
             />
           </div>
@@ -816,7 +818,7 @@ function TaskCreatePanel({
               id="task-description"
               value={description}
               onChange={(event) => setDescription(event.target.value)}
-              className={`${fieldClass} min-h-[94px] resize-y py-2 leading-6`}
+              className={`${taskFormFieldClass} min-h-[94px] resize-y py-2 leading-6`}
               placeholder="Describe what the agent should do"
             />
           </div>
@@ -831,7 +833,7 @@ function TaskCreatePanel({
               id="task-tags"
               value={tagText}
               onChange={(event) => setTagText(event.target.value)}
-              className={`${fieldClass} h-9`}
+              className={`${taskFormFieldClass} h-9`}
               placeholder="Frontend, Review, Bug"
             />
           </div>
@@ -852,7 +854,7 @@ function TaskCreatePanel({
                 onChange={(event) =>
                   setStatus(event.target.value as TaskStatus)
                 }
-                className={`${fieldClass} h-9`}
+                className={`${taskFormFieldClass} h-9`}
               >
                 {workflowColumns.map((column) => (
                   <option key={column.id} value={column.id}>
@@ -874,7 +876,7 @@ function TaskCreatePanel({
                 onChange={(event) =>
                   setPriority(event.target.value as KavbanTaskPriority)
                 }
-                className={`${fieldClass} h-9`}
+                className={`${taskFormFieldClass} h-9`}
               >
                 {taskPriorities.map((item) => (
                   <option key={item} value={item}>
@@ -899,7 +901,7 @@ function TaskCreatePanel({
                 onChange={(event) =>
                   setAgentId(event.target.value as KavbanAgentId)
                 }
-                className={`${fieldClass} h-9`}
+                className={`${taskFormFieldClass} h-9`}
               >
                 {agentOptions.map((item) => (
                   <option key={item} value={item}>
@@ -921,7 +923,7 @@ function TaskCreatePanel({
                 onChange={(event) =>
                   setReviewerId(event.target.value as KavbanAgentId)
                 }
-                className={`${fieldClass} h-9`}
+                className={`${taskFormFieldClass} h-9`}
               >
                 {reviewerOptions.map((item) => (
                   <option key={item} value={item}>
@@ -1144,7 +1146,295 @@ function TasksList({
   );
 }
 
-function TaskDetailPanel({ task }: { task: Task }) {
+function TaskEditForm({
+  contextFiles,
+  onCancel,
+  onSave,
+  task,
+}: {
+  contextFiles: Project['contextFiles'];
+  onCancel: () => void;
+  onSave: (input: KavbanUpdateTaskInput) => boolean;
+  task: Task;
+}) {
+  const [title, setTitle] = useState(task.title);
+  const [description, setDescription] = useState(task.description);
+  const [status, setStatus] = useState<TaskStatus>(task.status);
+  const [priority, setPriority] = useState<KavbanTaskPriority>(task.priority);
+  const [agentId, setAgentId] = useState<KavbanAgentId>(task.agentId);
+  const [reviewerId, setReviewerId] = useState<KavbanAgentId>(task.reviewerId);
+  const [tagText, setTagText] = useState(
+    task.tags.map((tag) => tag.label).join(', ')
+  );
+  const [selectedContextFiles, setSelectedContextFiles] = useState(
+    task.contextFiles
+  );
+
+  useEffect(() => {
+    setTitle(task.title);
+    setDescription(task.description);
+    setStatus(task.status);
+    setPriority(task.priority);
+    setAgentId(task.agentId);
+    setReviewerId(task.reviewerId);
+    setTagText(task.tags.map((tag) => tag.label).join(', '));
+    setSelectedContextFiles(task.contextFiles);
+  }, [task]);
+
+  const toggleContextFile = (path: string) => {
+    setSelectedContextFiles((current) =>
+      current.includes(path)
+        ? current.filter((item) => item !== path)
+        : [...current, path]
+    );
+  };
+
+  return (
+    <form
+      className="space-y-4 px-5 py-5"
+      onSubmit={(event) => {
+        event.preventDefault();
+
+        const saved = onSave({
+          title,
+          description,
+          status,
+          priority,
+          agentId,
+          reviewerId,
+          tagLabels: tagText.split(','),
+          contextFiles: selectedContextFiles,
+        });
+
+        if (saved) {
+          onCancel();
+        }
+      }}
+    >
+      <div>
+        <label
+          htmlFor="edit-task-title"
+          className="mb-1.5 block text-xs font-semibold text-[#777d88]"
+        >
+          Title
+        </label>
+        <input
+          id="edit-task-title"
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          className={`${taskFormFieldClass} h-9`}
+        />
+      </div>
+
+      <div>
+        <label
+          htmlFor="edit-task-description"
+          className="mb-1.5 block text-xs font-semibold text-[#777d88]"
+        >
+          Instructions
+        </label>
+        <textarea
+          id="edit-task-description"
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
+          className={`${taskFormFieldClass} min-h-[112px] resize-y py-2 leading-6`}
+        />
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+        <div>
+          <label
+            htmlFor="edit-task-status"
+            className="mb-1.5 block text-xs font-semibold text-[#777d88]"
+          >
+            Status
+          </label>
+          <select
+            id="edit-task-status"
+            value={status}
+            onChange={(event) => setStatus(event.target.value as TaskStatus)}
+            className={`${taskFormFieldClass} h-9`}
+          >
+            {workflowColumns.map((column) => (
+              <option key={column.id} value={column.id}>
+                {column.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label
+            htmlFor="edit-task-priority"
+            className="mb-1.5 block text-xs font-semibold text-[#777d88]"
+          >
+            Priority
+          </label>
+          <select
+            id="edit-task-priority"
+            value={priority}
+            onChange={(event) =>
+              setPriority(event.target.value as KavbanTaskPriority)
+            }
+            className={`${taskFormFieldClass} h-9`}
+          >
+            {taskPriorities.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+        <div>
+          <label
+            htmlFor="edit-task-agent"
+            className="mb-1.5 block text-xs font-semibold text-[#777d88]"
+          >
+            Agent
+          </label>
+          <select
+            id="edit-task-agent"
+            value={agentId}
+            onChange={(event) =>
+              setAgentId(event.target.value as KavbanAgentId)
+            }
+            className={`${taskFormFieldClass} h-9`}
+          >
+            {agentOptions.map((item) => (
+              <option key={item} value={item}>
+                {kavbanAgents[item].name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label
+            htmlFor="edit-task-reviewer"
+            className="mb-1.5 block text-xs font-semibold text-[#777d88]"
+          >
+            Reviewer
+          </label>
+          <select
+            id="edit-task-reviewer"
+            value={reviewerId}
+            onChange={(event) =>
+              setReviewerId(event.target.value as KavbanAgentId)
+            }
+            className={`${taskFormFieldClass} h-9`}
+          >
+            {reviewerOptions.map((item) => (
+              <option key={item} value={item}>
+                {kavbanAgents[item].name}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label
+          htmlFor="edit-task-tags"
+          className="mb-1.5 block text-xs font-semibold text-[#777d88]"
+        >
+          Tags
+        </label>
+        <input
+          id="edit-task-tags"
+          value={tagText}
+          onChange={(event) => setTagText(event.target.value)}
+          className={`${taskFormFieldClass} h-9`}
+        />
+      </div>
+
+      <div>
+        <p className="mb-2 text-xs font-semibold text-[#777d88]">Context</p>
+        <div className="flex flex-wrap gap-2">
+          {contextFiles.map((file) => {
+            const selected = selectedContextFiles.includes(file.path);
+
+            return (
+              <button
+                type="button"
+                key={file.path}
+                onClick={() => toggleContextFile(file.path)}
+                className={cn(
+                  'inline-flex h-8 items-center gap-2 rounded-[6px] border px-2.5 text-xs font-semibold transition-colors',
+                  selected
+                    ? 'border-[#31553a] bg-[#172219] text-[#78d16d]'
+                    : 'border-[#2a2c31] bg-[#202227] text-[#9ca1ad] hover:border-[#3a3d46]'
+                )}
+              >
+                <FileTextIcon className="size-3.5" weight="bold" />
+                {file.path}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="flex items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="h-9 rounded-[6px] border border-[#2a2c31] px-3 text-xs font-semibold text-[#9ca1ad] transition-colors hover:bg-[#202227]"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={!title.trim()}
+          className="h-9 rounded-[6px] border border-[#31553a] px-3 text-xs font-semibold text-[#78d16d] transition-colors hover:bg-[#172219] disabled:cursor-not-allowed disabled:border-[#2a2c31] disabled:text-[#626874]"
+        >
+          Save changes
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function TaskDetailPanel({
+  contextFiles,
+  onUpdateTask,
+  task,
+}: {
+  contextFiles: Project['contextFiles'];
+  onUpdateTask: (taskId: string, input: KavbanUpdateTaskInput) => boolean;
+  task: Task;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+
+  useEffect(() => {
+    setIsEditing(false);
+  }, [task.id]);
+
+  if (isEditing) {
+    return (
+      <aside className="hidden w-[380px] shrink-0 overflow-y-auto border-l border-[#24262b] bg-[#111214] xl:block">
+        <div className="border-b border-[#24262b] px-5 py-5">
+          <div className="mb-3 flex items-center justify-between">
+            <span className="font-ibm-plex-mono text-sm text-[#6f7682]">
+              {task.key}
+            </span>
+            <IconButton
+              label="Cancel editing"
+              icon={XIcon}
+              onClick={() => setIsEditing(false)}
+            />
+          </div>
+          <h2 className="text-lg font-semibold text-[#dce0e8]">Edit task</h2>
+        </div>
+        <TaskEditForm
+          contextFiles={contextFiles}
+          onCancel={() => setIsEditing(false)}
+          onSave={(input) => onUpdateTask(task.id, input)}
+          task={task}
+        />
+      </aside>
+    );
+  }
+
   return (
     <aside className="hidden w-[380px] shrink-0 border-l border-[#24262b] bg-[#111214] xl:block">
       <div className="border-b border-[#24262b] px-5 py-5">
@@ -1152,7 +1442,14 @@ function TaskDetailPanel({ task }: { task: Task }) {
           <span className="font-ibm-plex-mono text-sm text-[#6f7682]">
             {task.key}
           </span>
-          <IconButton label="Task options" icon={DotsThreeIcon} />
+          <div className="flex items-center gap-1">
+            <IconButton
+              label="Edit task"
+              icon={PencilSimpleIcon}
+              onClick={() => setIsEditing(true)}
+            />
+            <IconButton label="Task options" icon={DotsThreeIcon} />
+          </div>
         </div>
         <h2 className="text-lg font-semibold text-[#dce0e8]">{task.title}</h2>
         <p className="mt-3 text-sm leading-6 text-[#8d939f]">
@@ -1216,6 +1513,7 @@ function TaskDetailPanel({ task }: { task: Task }) {
 function WorkspaceTasks({
   contextFiles,
   onCreateTask,
+  onUpdateTask,
   projectName,
   taskView,
   onTaskViewChange,
@@ -1225,6 +1523,7 @@ function WorkspaceTasks({
 }: {
   contextFiles: Project['contextFiles'];
   onCreateTask: (input: KavbanCreateTaskInput) => string | null;
+  onUpdateTask: (taskId: string, input: KavbanUpdateTaskInput) => boolean;
   projectName: string;
   taskView: TaskView;
   onTaskViewChange: (view: TaskView) => void;
@@ -1340,7 +1639,13 @@ function WorkspaceTasks({
           />
         )}
       </main>
-      {selectedTask && <TaskDetailPanel task={selectedTask} />}
+      {selectedTask && (
+        <TaskDetailPanel
+          contextFiles={contextFiles}
+          onUpdateTask={onUpdateTask}
+          task={selectedTask}
+        />
+      )}
     </div>
   );
 }
@@ -1460,6 +1765,7 @@ function WorkspaceView({
   onSelectTask,
   onTaskViewChange,
   onToggleConnector,
+  onUpdateTask,
   project,
   projectTab,
   projects,
@@ -1476,6 +1782,7 @@ function WorkspaceView({
   onSelectTask: (id: string) => void;
   onTaskViewChange: (view: TaskView) => void;
   onToggleConnector: (id: ConnectorId) => void;
+  onUpdateTask: (taskId: string, input: KavbanUpdateTaskInput) => boolean;
   project: Project;
   projectTab: ProjectTab;
   projects: Project[];
@@ -1513,6 +1820,7 @@ function WorkspaceView({
           <WorkspaceTasks
             contextFiles={project.contextFiles}
             onCreateTask={onCreateTask}
+            onUpdateTask={onUpdateTask}
             projectName={project.name}
             taskView={taskView}
             onTaskViewChange={onTaskViewChange}
@@ -1636,6 +1944,7 @@ export function KavbanDashboard() {
     selectProject,
     updateConnector,
     updateProjectBrief,
+    updateTask,
   } = useKavbanLocalStore();
   const [activeSection, setActiveSection] = useState<AppSection>('workspace');
   const [projectTab, setProjectTab] = useState<ProjectTab>('tasks');
@@ -1702,6 +2011,7 @@ export function KavbanDashboard() {
               onSelectTask={setSelectedTaskId}
               onTaskViewChange={setTaskView}
               onToggleConnector={toggleConnector}
+              onUpdateTask={updateTask}
               project={project}
               projectTab={projectTab}
               projects={projects}

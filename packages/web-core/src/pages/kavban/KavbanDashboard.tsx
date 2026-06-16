@@ -4424,6 +4424,183 @@ function WorkspaceSettings({
             })}
           </div>
         </section>
+
+        <section className="rounded-[8px] border border-[#24262b] bg-[#17181b] p-5">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <ShieldCheckIcon
+                className="size-5 text-[#858b96]"
+                weight="bold"
+              />
+              <h2 className="text-lg font-semibold text-[#dce0e8]">
+                Review rules
+              </h2>
+            </div>
+            <span className="rounded-full border border-[#31553a] px-2 py-1 text-xs font-semibold text-[#78d16d]">
+              AI review required
+            </span>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            {[
+              {
+                label: 'Independent reviewer',
+                value: kavbanAgents[draftAgentRouting.reviewerAgentId].name,
+                icon: ShieldCheckIcon,
+              },
+              {
+                label: 'Human review default',
+                value: draftAgentRouting.humanReviewRequired
+                  ? 'Required'
+                  : 'Optional',
+                icon: UserCircleIcon,
+              },
+              {
+                label: 'Review checklist',
+                value: contextFiles.some(
+                  (file) => file.path === 'review-checklist.md'
+                )
+                  ? 'Injected'
+                  : 'Missing',
+                icon: ListChecksIcon,
+              },
+              {
+                label: 'Writer self-approval',
+                value: 'Blocked',
+                icon: LockKeyIcon,
+              },
+            ].map((rule) => {
+              const Icon = rule.icon;
+
+              return (
+                <div
+                  key={rule.label}
+                  className="rounded-[7px] border border-[#24262b] bg-[#111214] p-3"
+                >
+                  <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#777d88]">
+                    <Icon className="size-3.5" weight="bold" />
+                    {rule.label}
+                  </div>
+                  <p className="text-sm font-semibold text-[#dce0e8]">
+                    {rule.value}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="rounded-[8px] border border-[#24262b] bg-[#17181b] p-5">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <GitPullRequestIcon
+                className="size-5 text-[#858b96]"
+                weight="bold"
+              />
+              <h2 className="text-lg font-semibold text-[#dce0e8]">
+                Merge rules
+              </h2>
+            </div>
+            <span className="rounded-full border border-[#2a2c31] px-2 py-1 font-ibm-plex-mono text-xs font-semibold text-[#858b96]">
+              {repository.defaultBranch}
+            </span>
+          </div>
+
+          <div className="space-y-3">
+            {[
+              'Agents create task branches before writing code.',
+              'Pull requests are opened before work can reach main.',
+              'Tests and AI review must be recorded on the task.',
+              'Human approval is required before sensitive merges.',
+              'Direct pushes, force-pushes, secrets edits, and production deploys are blocked.',
+            ].map((rule) => (
+              <div
+                key={rule}
+                className="flex items-start gap-3 rounded-[7px] border border-[#24262b] bg-[#111214] p-3"
+              >
+                <CheckCircleIcon
+                  className="mt-0.5 size-4 shrink-0 text-[#78d16d]"
+                  weight="bold"
+                />
+                <p className="text-sm leading-6 text-[#cfd2da]">{rule}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="rounded-[8px] border border-[#24262b] bg-[#17181b] p-5">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <RocketIcon className="size-5 text-[#858b96]" weight="bold" />
+              <h2 className="text-lg font-semibold text-[#dce0e8]">
+                Notifications
+              </h2>
+            </div>
+            <span className="rounded-full border border-[#2a2c31] px-2 py-1 text-xs font-semibold text-[#858b96]">
+              Inbox routed
+            </span>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            {kavbanNotificationRules.map((rule) => (
+              <div
+                key={rule.kind}
+                className="rounded-[7px] border border-[#24262b] bg-[#111214] p-3"
+              >
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-[#dce0e8]">
+                    {rule.label}
+                  </p>
+                  <span className="rounded-full border border-[#31553a] px-2 py-0.5 text-[11px] font-semibold text-[#78d16d]">
+                    {rule.status}
+                  </span>
+                </div>
+                <p className="text-xs leading-5 text-[#858b96]">
+                  {rule.description}
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="rounded-[8px] border border-[#553131] bg-[#17181b] p-5">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <LockKeyIcon className="size-5 text-[#f26d6d]" weight="bold" />
+              <h2 className="text-lg font-semibold text-[#dce0e8]">
+                Danger zone
+              </h2>
+            </div>
+            <span className="rounded-full border border-[#553131] px-2 py-1 text-xs font-semibold text-[#f26d6d]">
+              Protected
+            </span>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            {[
+              {
+                label: 'Project deletion',
+                body: 'Project removal stays unavailable until audit logging and confirmation gates are backed by the store.',
+              },
+              {
+                label: 'Main branch write access',
+                body: 'KAVBAN agents can open branches and PRs; they cannot push or merge directly to main.',
+              },
+            ].map((item) => (
+              <div
+                key={item.label}
+                className="rounded-[7px] border border-[#3b2a2d] bg-[#111214] p-3"
+              >
+                <p className="text-sm font-semibold text-[#f26d6d]">
+                  {item.label}
+                </p>
+                <p className="mt-2 text-sm leading-6 text-[#9ca1ad]">
+                  {item.body}
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
       </div>
     </div>
   );

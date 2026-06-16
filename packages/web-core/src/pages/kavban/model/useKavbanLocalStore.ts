@@ -1156,6 +1156,78 @@ export function useKavbanLocalStore() {
     [activeProject]
   );
 
+  const pauseAgentRun = useCallback(
+    (taskId: string) => {
+      const taskToPause = activeProject.tasks.find(
+        (task) => task.id === taskId
+      );
+
+      if (!taskToPause?.lockedBy || !taskToPause.lockRunId) {
+        return false;
+      }
+
+      const updatedAt = nowIso();
+      const activeRunId = taskToPause.lockRunId;
+      const activeAgent = kavbanAgents[taskToPause.lockedBy];
+
+      setState((current) => ({
+        ...current,
+        projects: current.projects.map((project) =>
+          project.id === current.activeProjectId
+            ? {
+                ...project,
+                tasks: project.tasks.map((task) =>
+                  task.id === taskId
+                    ? {
+                        ...task,
+                        status: 'ready',
+                        state: taskStateByStatus.ready,
+                        lockedBy: undefined,
+                        lockedAt: undefined,
+                        lockRunId: undefined,
+                        lockReason: undefined,
+                        agentRuns: task.agentRuns?.map((run) =>
+                          run.id === activeRunId
+                            ? {
+                                ...run,
+                                status: 'paused',
+                                logs: [
+                                  ...(run.logs ?? []),
+                                  {
+                                    id: `log-${activeRunId}-paused-${Date.now().toString(36)}`,
+                                    level: 'warning' as const,
+                                    message: `${activeAgent.name} run paused; task returned to Ready for Agent.`,
+                                    createdAt: updatedAt,
+                                  },
+                                ],
+                                updatedAt,
+                              }
+                            : run
+                        ),
+                        events: [
+                          ...task.events,
+                          {
+                            id: `evt-${activeRunId}-paused-${Date.now().toString(36)}`,
+                            kind: 'task-unlocked',
+                            actor: 'human',
+                            summary: `${activeAgent.name} run paused and task lock released.`,
+                            createdAt: updatedAt,
+                          },
+                        ],
+                      }
+                    : task
+                ),
+              }
+            : project
+        ),
+        updatedAt,
+      }));
+
+      return true;
+    },
+    [activeProject.tasks]
+  );
+
   const recordAgentRunCheck = useCallback(
     (taskId: string, runId: string, input: KavbanRecordRunCheckInput) => {
       const taskToUpdate = activeProject.tasks.find(
@@ -1783,6 +1855,7 @@ export function useKavbanLocalStore() {
     recordHumanReview,
     selectProject,
     startAgentRun,
+    pauseAgentRun,
     state,
     updateAgentRouting,
     updateConnector,

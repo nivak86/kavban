@@ -120,7 +120,8 @@ export type KavbanAgentRunStatus =
   | 'queued'
   | 'running'
   | 'completed'
-  | 'failed';
+  | 'failed'
+  | 'paused';
 
 export type KavbanCheckStatus = 'passed' | 'failed';
 

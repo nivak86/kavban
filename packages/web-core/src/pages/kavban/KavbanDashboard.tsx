@@ -2158,6 +2158,7 @@ function TaskDetailPanel({
   onMoveTask,
   onOpenRollbackPullRequest,
   onOpenTaskPullRequest,
+  onPauseAgentRun,
   onRecordHumanReview,
   onRecordRunCheck,
   onStartAgentRun,
@@ -2177,6 +2178,7 @@ function TaskDetailPanel({
   onMoveTask: (taskId: string, status: TaskStatus) => boolean;
   onOpenRollbackPullRequest: (taskId: string) => string | null;
   onOpenTaskPullRequest: (taskId: string) => string | null;
+  onPauseAgentRun: (taskId: string) => boolean;
   onRecordHumanReview: (
     taskId: string,
     input: KavbanRecordHumanReviewInput
@@ -2341,9 +2343,19 @@ function TaskDetailPanel({
 
         {taskLockAgent && (
           <div className="rounded-[7px] border border-[#5b4a22] bg-[#241f15] p-3">
-            <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#f2d14b]">
-              <LockKeyIcon className="size-4" weight="bold" />
-              Locked by {taskLockAgent.name}
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-sm font-semibold text-[#f2d14b]">
+                <LockKeyIcon className="size-4" weight="bold" />
+                Locked by {taskLockAgent.name}
+              </div>
+              <button
+                type="button"
+                onClick={() => onPauseAgentRun(task.id)}
+                className="inline-flex h-7 items-center gap-1.5 rounded-[5px] border border-[#5b4a22] bg-[#17181b] px-2 text-[11px] font-semibold text-[#f2d14b] transition-colors hover:border-[#7a622d]"
+              >
+                <XIcon className="size-3.5" weight="bold" />
+                Pause run
+              </button>
             </div>
             <p className="text-sm leading-5 text-[#cdb979]">
               {task.lockReason ?? 'Agent run in progress.'}
@@ -2837,6 +2849,7 @@ function WorkspaceTasks({
   onMoveTask,
   onOpenRollbackPullRequest,
   onOpenTaskPullRequest,
+  onPauseAgentRun,
   onRecordHumanReview,
   onRecordRunCheck,
   onStartAgentRun,
@@ -2865,6 +2878,7 @@ function WorkspaceTasks({
   onMoveTask: (taskId: string, status: TaskStatus) => boolean;
   onOpenRollbackPullRequest: (taskId: string) => string | null;
   onOpenTaskPullRequest: (taskId: string) => string | null;
+  onPauseAgentRun: (taskId: string) => boolean;
   onRecordHumanReview: (
     taskId: string,
     input: KavbanRecordHumanReviewInput
@@ -3112,6 +3126,7 @@ function WorkspaceTasks({
           onMoveTask={onMoveTask}
           onOpenRollbackPullRequest={onOpenRollbackPullRequest}
           onOpenTaskPullRequest={onOpenTaskPullRequest}
+          onPauseAgentRun={onPauseAgentRun}
           onRecordHumanReview={onRecordHumanReview}
           onRecordRunCheck={onRecordRunCheck}
           onStartAgentRun={onStartAgentRun}
@@ -3824,6 +3839,7 @@ function WorkspaceView({
   onOpenRollbackPullRequest,
   onProjectTabChange,
   onOpenTaskPullRequest,
+  onPauseAgentRun,
   onRecordHumanReview,
   onRecordRunCheck,
   onRepositoryChange,
@@ -3862,6 +3878,7 @@ function WorkspaceView({
   onOpenRollbackPullRequest: (taskId: string) => string | null;
   onProjectTabChange: (tab: ProjectTab) => void;
   onOpenTaskPullRequest: (taskId: string) => string | null;
+  onPauseAgentRun: (taskId: string) => boolean;
   onRecordHumanReview: (
     taskId: string,
     input: KavbanRecordHumanReviewInput
@@ -3926,6 +3943,7 @@ function WorkspaceView({
             onMoveTask={onMoveTask}
             onOpenRollbackPullRequest={onOpenRollbackPullRequest}
             onOpenTaskPullRequest={onOpenTaskPullRequest}
+            onPauseAgentRun={onPauseAgentRun}
             onRecordHumanReview={onRecordHumanReview}
             onRecordRunCheck={onRecordRunCheck}
             onStartAgentRun={onStartAgentRun}
@@ -4281,6 +4299,7 @@ export function KavbanDashboard() {
     profile,
     project,
     projects,
+    pauseAgentRun,
     recordAgentRunCheck,
     recordHumanReview,
     selectProject,
@@ -4365,6 +4384,7 @@ export function KavbanDashboard() {
               onMoveTask={moveTask}
               onOpenRollbackPullRequest={openRollbackPullRequest}
               onOpenTaskPullRequest={openTaskPullRequest}
+              onPauseAgentRun={pauseAgentRun}
               onProjectTabChange={setProjectTab}
               onRecordHumanReview={recordHumanReview}
               onRecordRunCheck={recordAgentRunCheck}

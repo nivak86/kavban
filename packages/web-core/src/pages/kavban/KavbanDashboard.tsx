@@ -1928,6 +1928,7 @@ function WorkspaceHome({
   connectors,
   onCreateProject,
   onSelectProject,
+  onSelectTask,
   onTabChange,
   project,
   projects,
@@ -1936,6 +1937,7 @@ function WorkspaceHome({
   connectors: Record<ConnectorId, Connector>;
   onCreateProject: (name: string) => void;
   onSelectProject: (id: string) => void;
+  onSelectTask: (id: string) => void;
   onTabChange: (tab: ProjectTab) => void;
   project: Project;
   projects: Project[];
@@ -1982,6 +1984,7 @@ function WorkspaceHome({
     ...blockedReadyTasks.slice(0, 3).map((item) => ({
       icon: ClockIcon,
       label: item.task.key,
+      taskId: item.task.id,
       title: item.task.title,
       detail: item.blockerSummary.title.split('\n')[0],
       tone: 'text-[#f2d14b]',
@@ -1989,6 +1992,7 @@ function WorkspaceHome({
     ...fixRequiredTasks.slice(0, 3).map((task) => ({
       icon: XIcon,
       label: task.key,
+      taskId: task.id,
       title: task.title,
       detail: 'Fixes required before this can return to review',
       tone: 'text-[#f26d6d]',
@@ -1996,6 +2000,7 @@ function WorkspaceHome({
     ...disconnectedConnectors.map((connector) => ({
       icon: connectorIconById[connector.id],
       label: connector.name,
+      targetTab: 'settings' as const,
       title: 'Connector setup needed',
       detail: connector.status,
       tone: 'text-[#f3cfa8]',
@@ -2167,11 +2172,22 @@ function WorkspaceHome({
                 <div className="space-y-2">
                   {attentionItems.map((item) => {
                     const Icon = item.icon;
+                    const openAttentionItem = () => {
+                      if ('taskId' in item) {
+                        onSelectTask(item.taskId);
+                        onTabChange('tasks');
+                        return;
+                      }
+
+                      onTabChange(item.targetTab);
+                    };
 
                     return (
-                      <div
+                      <button
+                        type="button"
                         key={`${item.label}-${item.title}`}
-                        className="grid min-h-10 grid-cols-[auto_64px_1fr] items-center gap-2 rounded-[6px] border border-[#24262b] bg-[#17181b] px-2.5 py-2 text-xs"
+                        onClick={openAttentionItem}
+                        className="grid min-h-10 w-full grid-cols-[auto_64px_1fr] items-center gap-2 rounded-[6px] border border-[#24262b] bg-[#17181b] px-2.5 py-2 text-left text-xs transition-colors hover:border-[#343741] hover:bg-[#202227]"
                       >
                         <Icon
                           className={cn('size-4 shrink-0', item.tone)}
@@ -2188,7 +2204,7 @@ function WorkspaceHome({
                             {item.detail}
                           </span>
                         </span>
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
@@ -6338,6 +6354,7 @@ function WorkspaceView({
             connectors={connectors}
             onCreateProject={onCreateProject}
             onSelectProject={onSelectProject}
+            onSelectTask={onSelectTask}
             onTabChange={onProjectTabChange}
             project={project}
             projects={projects}

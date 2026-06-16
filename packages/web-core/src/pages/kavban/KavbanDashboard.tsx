@@ -3291,6 +3291,7 @@ function WorkspaceTasks({
   onOpenRollbackPullRequest,
   onOpenTaskPullRequest,
   onPauseAgentRun,
+  onProjectTabChange,
   onRecordHumanReview,
   onRecordRunCheck,
   onStartAgentRun,
@@ -3321,6 +3322,7 @@ function WorkspaceTasks({
   onOpenRollbackPullRequest: (taskId: string) => string | null;
   onOpenTaskPullRequest: (taskId: string) => string | null;
   onPauseAgentRun: (taskId: string) => boolean;
+  onProjectTabChange: (tab: ProjectTab) => void;
   onRecordHumanReview: (
     taskId: string,
     input: KavbanRecordHumanReviewInput
@@ -3343,6 +3345,7 @@ function WorkspaceTasks({
   const [isCreatingTask, setIsCreatingTask] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isImportingTask, setIsImportingTask] = useState(false);
+  const [isProjectMenuOpen, setIsProjectMenuOpen] = useState(false);
   const [taskSearch, setTaskSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | TaskStatus>('all');
   const [agentFilter, setAgentFilter] = useState<'all' | KavbanAgentId>('all');
@@ -3423,6 +3426,7 @@ function WorkspaceTasks({
 
   const openImportTask = () => {
     setIsCreatingTask(false);
+    setIsProjectMenuOpen(false);
     setIsImportingTask(true);
   };
 
@@ -3481,7 +3485,7 @@ function WorkspaceTasks({
     <div className="flex h-full min-h-0">
       <main className="min-w-0 flex-1 overflow-auto bg-[#101113]">
         <header className="flex min-h-[67px] items-center justify-between border-b border-[#24262b] bg-[#111214] px-12">
-          <div className="flex min-w-0 items-center gap-3">
+          <div className="relative flex min-w-0 items-center gap-3">
             <h1 className="truncate text-[20px] font-semibold text-[#dce0e8]">
               Agent tasks
             </h1>
@@ -3490,10 +3494,48 @@ function WorkspaceTasks({
               weight="fill"
             />
             <IconButton
-              label={`Import a Codex task into ${projectName}`}
+              label={`${projectName} menu`}
               icon={DotsThreeIcon}
-              onClick={openImportTask}
+              onClick={() => setIsProjectMenuOpen((current) => !current)}
             />
+            {isProjectMenuOpen && (
+              <div className="absolute left-0 top-10 z-30 w-56 rounded-[8px] border border-[#2a2c31] bg-[#17181b] p-1 shadow-[0_18px_48px_rgba(0,0,0,0.35)]">
+                {[
+                  {
+                    icon: HouseIcon,
+                    label: 'Project home',
+                    onClick: () => onProjectTabChange('home'),
+                  },
+                  {
+                    icon: GearIcon,
+                    label: 'Project settings',
+                    onClick: () => onProjectTabChange('settings'),
+                  },
+                  {
+                    icon: BracketsCurlyIcon,
+                    label: 'Import Codex task',
+                    onClick: openImportTask,
+                  },
+                ].map((item) => {
+                  const Icon = item.icon;
+
+                  return (
+                    <button
+                      key={item.label}
+                      type="button"
+                      onClick={() => {
+                        item.onClick();
+                        setIsProjectMenuOpen(false);
+                      }}
+                      className="flex h-9 w-full items-center gap-2 rounded-[6px] px-2.5 text-left text-xs font-semibold text-[#aeb3bd] transition-colors hover:bg-[#202227] hover:text-[#dce0e8]"
+                    >
+                      <Icon className="size-4" weight="bold" />
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <IconButton
@@ -4484,6 +4526,7 @@ function WorkspaceView({
         onOpenRollbackPullRequest={onOpenRollbackPullRequest}
         onOpenTaskPullRequest={onOpenTaskPullRequest}
         onPauseAgentRun={onPauseAgentRun}
+        onProjectTabChange={onProjectTabChange}
         onRecordHumanReview={onRecordHumanReview}
         onRecordRunCheck={onRecordRunCheck}
         onStartAgentRun={onStartAgentRun}
@@ -4918,13 +4961,20 @@ export function KavbanDashboard() {
           : 'Ready',
     }));
   };
+  const handleSectionChange = (section: AppSection) => {
+    setActiveSection(section);
+
+    if (section === 'workspace') {
+      setProjectTab('tasks');
+    }
+  };
 
   return (
     <div className="dark h-screen w-screen overflow-hidden bg-[#08090a] p-3 font-ibm-plex-sans text-[#c9cdd6]">
       <div className="flex h-full min-h-0 overflow-hidden rounded-[14px] border border-[#2b2e34] bg-[#111214] shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
         <Sidebar
           activeSection={activeSection}
-          onSectionChange={setActiveSection}
+          onSectionChange={handleSectionChange}
           profile={profile}
         />
         <main className="min-w-0 flex-1 overflow-hidden">

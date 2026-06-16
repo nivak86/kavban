@@ -2898,16 +2898,50 @@ function WorkspaceTasks({
   tasks: Task[];
 }) {
   const [isCreatingTask, setIsCreatingTask] = useState(false);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isImportingTask, setIsImportingTask] = useState(false);
+  const [taskSearch, setTaskSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | TaskStatus>('all');
+  const [agentFilter, setAgentFilter] = useState<'all' | KavbanAgentId>('all');
   const [queueSummary, setQueueSummary] = useState('');
   const [taskCreateStatus, setTaskCreateStatus] =
     useState<TaskStatus>('backlog');
-  const selectedTask =
-    tasks.find((task) => task.id === selectedTaskId) ?? tasks[0];
   const readyTasks = useMemo(
     () => tasks.filter((task) => task.status === 'ready'),
     [tasks]
   );
+  const filteredTasks = useMemo(() => {
+    const normalizedSearch = taskSearch.trim().toLowerCase();
+
+    return tasks.filter((task) => {
+      const matchesSearch =
+        !normalizedSearch ||
+        [
+          task.key,
+          task.title,
+          task.description,
+          task.branch,
+          task.pr,
+          ...task.tags.map((tag) => tag.label),
+        ]
+          .filter((value): value is string => Boolean(value))
+          .some((value) => value.toLowerCase().includes(normalizedSearch));
+      const matchesStatus =
+        statusFilter === 'all' || task.status === statusFilter;
+      const matchesAgent =
+        agentFilter === 'all' || task.agentId === agentFilter;
+
+      return matchesSearch && matchesStatus && matchesAgent;
+    });
+  }, [agentFilter, statusFilter, taskSearch, tasks]);
+  const selectedTask =
+    filteredTasks.find((task) => task.id === selectedTaskId) ??
+    filteredTasks[0];
+  const activeFilterCount = [
+    taskSearch.trim(),
+    statusFilter !== 'all',
+    agentFilter !== 'all',
+  ].filter(Boolean).length;
   const runnableReadyTasks = useMemo(
     () =>
       readyTasks.filter(
@@ -2924,6 +2958,12 @@ function WorkspaceTasks({
     setTaskCreateStatus(status);
     setIsCreatingTask(true);
     setIsImportingTask(false);
+  };
+
+  const resetTaskFilters = () => {
+    setTaskSearch('');
+    setStatusFilter('all');
+    setAgentFilter('all');
   };
 
   const handleCreateTask = (input: KavbanCreateTaskInput) => {
@@ -3026,7 +3066,11 @@ function WorkspaceTasks({
                   );
                 })}
               </div>
-              <IconButton label="Filter tasks" icon={FunnelSimpleIcon} />
+              <IconButton
+                label="Filter tasks"
+                icon={FunnelSimpleIcon}
+                onClick={() => setIsFilterOpen((current) => !current)}
+              />
               <IconButton label="Task display" icon={SlidersHorizontalIcon} />
               <IconButton
                 label="Start ready queue"
@@ -3060,6 +3104,77 @@ function WorkspaceTasks({
             >
               <XIcon className="size-4" weight="bold" />
             </button>
+          </div>
+        )}
+        {isFilterOpen && (
+          <div className="border-b border-[#24262b] bg-[#111214] px-6 py-4">
+            <div className="grid gap-3 lg:grid-cols-[minmax(240px,1fr)_180px_180px_auto] lg:items-end">
+              <label className="block" htmlFor="task-filter-search">
+                <span className="mb-1.5 block text-xs font-semibold text-[#777d88]">
+                  Search
+                </span>
+                <input
+                  id="task-filter-search"
+                  value={taskSearch}
+                  onChange={(event) => setTaskSearch(event.target.value)}
+                  className={`${taskFormFieldClass} h-9`}
+                  placeholder="Key, title, branch, tag"
+                />
+              </label>
+              <label className="block" htmlFor="task-filter-status">
+                <span className="mb-1.5 block text-xs font-semibold text-[#777d88]">
+                  Status
+                </span>
+                <select
+                  id="task-filter-status"
+                  value={statusFilter}
+                  onChange={(event) =>
+                    setStatusFilter(event.target.value as 'all' | TaskStatus)
+                  }
+                  className={`${taskFormFieldClass} h-9`}
+                >
+                  <option value="all">All statuses</option>
+                  {workflowColumns.map((column) => (
+                    <option key={column.id} value={column.id}>
+                      {column.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block" htmlFor="task-filter-agent">
+                <span className="mb-1.5 block text-xs font-semibold text-[#777d88]">
+                  Agent
+                </span>
+                <select
+                  id="task-filter-agent"
+                  value={agentFilter}
+                  onChange={(event) =>
+                    setAgentFilter(event.target.value as 'all' | KavbanAgentId)
+                  }
+                  className={`${taskFormFieldClass} h-9`}
+                >
+                  <option value="all">All agents</option>
+                  {agentOptions.map((agentId) => (
+                    <option key={agentId} value={agentId}>
+                      {kavbanAgents[agentId].name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                onClick={resetTaskFilters}
+                disabled={activeFilterCount === 0}
+                className="inline-flex h-9 items-center justify-center gap-2 rounded-[6px] border border-[#2a2c31] px-3 text-xs font-semibold text-[#9ca1ad] transition-colors hover:bg-[#202227] disabled:cursor-not-allowed disabled:text-[#626874]"
+              >
+                <XIcon className="size-4" weight="bold" />
+                Reset
+              </button>
+            </div>
+            <p className="mt-3 text-xs text-[#777d88]">
+              Showing {filteredTasks.length} of {tasks.length} task
+              {tasks.length === 1 ? '' : 's'}
+            </p>
           </div>
         )}
         {isCreatingTask && (
@@ -3100,18 +3215,38 @@ function WorkspaceTasks({
               New task
             </button>
           </div>
+        ) : filteredTasks.length === 0 ? (
+          <div className="flex h-[calc(100%-73px)] flex-col items-center justify-center gap-4 px-6 py-7 text-center">
+            <FunnelSimpleIcon className="size-9 text-[#626874]" weight="bold" />
+            <div>
+              <p className="text-sm font-semibold text-[#dce0e8]">
+                No tasks match these filters
+              </p>
+              <p className="mt-1 text-sm text-[#858b96]">
+                Adjust the search, status, or agent filters.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={resetTaskFilters}
+              className="inline-flex h-9 items-center gap-2 rounded-[6px] border border-[#2a2c31] bg-[#202227] px-3 text-xs font-semibold text-[#cfd2da] transition-colors hover:border-[#3a3d46]"
+            >
+              <XIcon className="size-4" weight="bold" />
+              Reset filters
+            </button>
+          </div>
         ) : taskView === 'board' ? (
           <TasksBoard
             onCreateTask={openCreateTask}
             selectedTaskId={selectedTaskId}
             onSelectTask={onSelectTask}
-            tasks={tasks}
+            tasks={filteredTasks}
           />
         ) : (
           <TasksList
             selectedTaskId={selectedTaskId}
             onSelectTask={onSelectTask}
-            tasks={tasks}
+            tasks={filteredTasks}
           />
         )}
       </main>

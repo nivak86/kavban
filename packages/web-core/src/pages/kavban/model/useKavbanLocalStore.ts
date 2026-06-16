@@ -7,10 +7,36 @@ import {
 } from './storage';
 import { kavbanProject } from './seed';
 import type {
+  KavbanAgentId,
   KavbanConnector,
   KavbanConnectorId,
   KavbanProject,
+  KavbanTask,
+  KavbanTaskPriority,
+  KavbanTaskStatus,
 } from './types';
+
+export type KavbanCreateTaskInput = {
+  title: string;
+  description: string;
+  status: KavbanTaskStatus;
+  priority: KavbanTaskPriority;
+  agentId: KavbanAgentId;
+  reviewerId: KavbanAgentId;
+  tagLabels: string[];
+  contextFiles: string[];
+};
+
+const taskStateByStatus: Record<KavbanTaskStatus, string> = {
+  backlog: 'Draft',
+  ready: 'Ready',
+  progress: 'Working...',
+  'ai-review': 'AI review',
+  'human-review': 'Needs human',
+  done: 'Done',
+};
+
+const tagColors = ['#6aa7ff', '#78d16d', '#f2d14b', '#f26d6d', '#d6cdfd'];
 
 function slugifyProjectName(name: string) {
   return (
@@ -54,6 +80,70 @@ function createProjectFromSeed(name: string): KavbanProject {
       name: slug,
     },
     tasks: [],
+  };
+}
+
+function getNextTaskNumber(tasks: KavbanTask[]) {
+  const highestNumber = tasks.reduce((highest, task) => {
+    const number = Number(task.key.match(/^KAV-(\d+)$/)?.[1]);
+
+    return Number.isFinite(number) ? Math.max(highest, number) : highest;
+  }, 120);
+
+  return highestNumber + 1;
+}
+
+function getTaskContextFiles(
+  project: KavbanProject,
+  input: KavbanCreateTaskInput
+) {
+  if (input.contextFiles.length > 0) {
+    return input.contextFiles;
+  }
+
+  return project.contextFiles
+    .filter((file) => file.injected)
+    .map((file) => file.path);
+}
+
+function createTaskFromInput(
+  project: KavbanProject,
+  input: KavbanCreateTaskInput
+): KavbanTask {
+  const taskNumber = getNextTaskNumber(project.tasks);
+  const taskKey = `KAV-${taskNumber}`;
+  const taskId = `kav-${String(taskNumber).padStart(6, '0')}`;
+  const createdAt = nowIso();
+  const tagLabels =
+    input.tagLabels.length > 0 ? input.tagLabels : ['Manual task'];
+
+  return {
+    id: taskId,
+    key: taskKey,
+    title: input.title,
+    description:
+      input.description ||
+      'Task created manually. Add implementation notes before running an agent.',
+    status: input.status,
+    state: taskStateByStatus[input.status],
+    priority: input.priority,
+    agentId: input.agentId,
+    reviewerId: input.reviewerId,
+    tags: tagLabels.map((label, index) => ({
+      label,
+      color: tagColors[index % tagColors.length],
+    })),
+    dependencies: [],
+    contextFiles: getTaskContextFiles(project, input),
+    events: [
+      {
+        id: `evt-${taskId}-created`,
+        kind: 'task-created',
+        actor: 'human',
+        summary: 'Task created manually in Kavban.',
+        createdAt,
+      },
+    ],
   };
 }
 
@@ -109,6 +199,40 @@ export function useKavbanLocalStore() {
     }));
   }, []);
 
+  const createTask = useCallback(
+    (input: KavbanCreateTaskInput) => {
+      const trimmedTitle = input.title.trim();
+
+      if (!trimmedTitle) {
+        return null;
+      }
+
+      const task = createTaskFromInput(activeProject, {
+        ...input,
+        title: trimmedTitle,
+        description: input.description.trim(),
+        tagLabels: input.tagLabels.map((label) => label.trim()).filter(Boolean),
+        contextFiles: input.contextFiles.filter(Boolean),
+      });
+
+      setState((current) => ({
+        ...current,
+        projects: current.projects.map((project) =>
+          project.id === current.activeProjectId
+            ? {
+                ...project,
+                tasks: [...project.tasks, task],
+              }
+            : project
+        ),
+        updatedAt: nowIso(),
+      }));
+
+      return task.id;
+    },
+    [activeProject]
+  );
+
   const updateConnector = useCallback(
     (
       connectorId: KavbanConnectorId,
@@ -136,6 +260,7 @@ export function useKavbanLocalStore() {
   return {
     activeProjectId: state.activeProjectId,
     createProject,
+    createTask,
     inboxItems: state.inboxItems,
     profile: state.profile,
     project: activeProject,

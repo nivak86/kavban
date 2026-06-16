@@ -45,12 +45,15 @@ import type {
   KavbanAgent as Agent,
   KavbanConnector as Connector,
   KavbanConnectorId as ConnectorId,
+  KavbanCreateTaskInput,
+  KavbanAgentId,
   KavbanInboxKind,
   KavbanInboxItem as InboxItem,
   KavbanProfile as Profile,
   KavbanProject as Project,
   KavbanTag as Tag,
   KavbanTask as Task,
+  KavbanTaskPriority,
   KavbanTaskStatus as TaskStatus,
   KavbanWorkflowIconKey,
 } from './model';
@@ -84,6 +87,9 @@ const inboxIconByKind: Record<KavbanInboxKind, PhosphorIcon> = {
 };
 
 const workflowColumns = kavbanWorkflowColumns;
+const agentOptions: KavbanAgentId[] = ['codex', 'claude'];
+const reviewerOptions: KavbanAgentId[] = ['reviewer', 'codex'];
+const taskPriorities: KavbanTaskPriority[] = ['High', 'Medium', 'Low'];
 const getProfileFirstName = (profile: Profile) =>
   profile.displayName.split(' ')[0] || profile.displayName;
 
@@ -715,6 +721,265 @@ function WorkspaceHome({
   );
 }
 
+function TaskCreatePanel({
+  contextFiles,
+  defaultStatus,
+  onCancel,
+  onCreate,
+}: {
+  contextFiles: Project['contextFiles'];
+  defaultStatus: TaskStatus;
+  onCancel: () => void;
+  onCreate: (input: KavbanCreateTaskInput) => string | null;
+}) {
+  const defaultContextFiles = useMemo(
+    () => contextFiles.filter((file) => file.injected).map((file) => file.path),
+    [contextFiles]
+  );
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [status, setStatus] = useState<TaskStatus>(defaultStatus);
+  const [priority, setPriority] = useState<KavbanTaskPriority>('Medium');
+  const [agentId, setAgentId] = useState<KavbanAgentId>('codex');
+  const [reviewerId, setReviewerId] = useState<KavbanAgentId>('reviewer');
+  const [tagText, setTagText] = useState('');
+  const [selectedContextFiles, setSelectedContextFiles] =
+    useState(defaultContextFiles);
+
+  useEffect(() => {
+    setStatus(defaultStatus);
+    setSelectedContextFiles(defaultContextFiles);
+  }, [defaultContextFiles, defaultStatus]);
+
+  const toggleContextFile = (path: string) => {
+    setSelectedContextFiles((current) =>
+      current.includes(path)
+        ? current.filter((item) => item !== path)
+        : [...current, path]
+    );
+  };
+
+  const fieldClass =
+    'w-full rounded-[6px] border border-[#2a2c31] bg-[#111214] px-3 text-sm text-[#dce0e8] outline-none transition-colors placeholder:text-[#626874] focus:border-[#444956]';
+
+  return (
+    <form
+      className="border-b border-[#24262b] bg-[#111214] px-6 py-5"
+      onSubmit={(event) => {
+        event.preventDefault();
+
+        const createdTaskId = onCreate({
+          title,
+          description,
+          status,
+          priority,
+          agentId,
+          reviewerId,
+          tagLabels: tagText.split(','),
+          contextFiles: selectedContextFiles,
+        });
+
+        if (!createdTaskId) {
+          return;
+        }
+
+        setTitle('');
+        setDescription('');
+        setTagText('');
+      }}
+    >
+      <div className="grid gap-4 xl:grid-cols-[minmax(280px,1.2fr)_0.8fr]">
+        <div className="space-y-3">
+          <div>
+            <label
+              htmlFor="task-title"
+              className="mb-1.5 block text-xs font-semibold text-[#777d88]"
+            >
+              Title
+            </label>
+            <input
+              id="task-title"
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              className={`${fieldClass} h-9`}
+              placeholder="Add a task title"
+            />
+          </div>
+          <div>
+            <label
+              htmlFor="task-description"
+              className="mb-1.5 block text-xs font-semibold text-[#777d88]"
+            >
+              Instructions
+            </label>
+            <textarea
+              id="task-description"
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              className={`${fieldClass} min-h-[94px] resize-y py-2 leading-6`}
+              placeholder="Describe what the agent should do"
+            />
+          </div>
+          <div>
+            <label
+              htmlFor="task-tags"
+              className="mb-1.5 block text-xs font-semibold text-[#777d88]"
+            >
+              Tags
+            </label>
+            <input
+              id="task-tags"
+              value={tagText}
+              onChange={(event) => setTagText(event.target.value)}
+              className={`${fieldClass} h-9`}
+              placeholder="Frontend, Review, Bug"
+            />
+          </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label
+                htmlFor="task-status"
+                className="mb-1.5 block text-xs font-semibold text-[#777d88]"
+              >
+                Status
+              </label>
+              <select
+                id="task-status"
+                value={status}
+                onChange={(event) =>
+                  setStatus(event.target.value as TaskStatus)
+                }
+                className={`${fieldClass} h-9`}
+              >
+                {workflowColumns.map((column) => (
+                  <option key={column.id} value={column.id}>
+                    {column.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label
+                htmlFor="task-priority"
+                className="mb-1.5 block text-xs font-semibold text-[#777d88]"
+              >
+                Priority
+              </label>
+              <select
+                id="task-priority"
+                value={priority}
+                onChange={(event) =>
+                  setPriority(event.target.value as KavbanTaskPriority)
+                }
+                className={`${fieldClass} h-9`}
+              >
+                {taskPriorities.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label
+                htmlFor="task-agent"
+                className="mb-1.5 block text-xs font-semibold text-[#777d88]"
+              >
+                Agent
+              </label>
+              <select
+                id="task-agent"
+                value={agentId}
+                onChange={(event) =>
+                  setAgentId(event.target.value as KavbanAgentId)
+                }
+                className={`${fieldClass} h-9`}
+              >
+                {agentOptions.map((item) => (
+                  <option key={item} value={item}>
+                    {kavbanAgents[item].name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label
+                htmlFor="task-reviewer"
+                className="mb-1.5 block text-xs font-semibold text-[#777d88]"
+              >
+                Reviewer
+              </label>
+              <select
+                id="task-reviewer"
+                value={reviewerId}
+                onChange={(event) =>
+                  setReviewerId(event.target.value as KavbanAgentId)
+                }
+                className={`${fieldClass} h-9`}
+              >
+                {reviewerOptions.map((item) => (
+                  <option key={item} value={item}>
+                    {kavbanAgents[item].name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <p className="mb-2 text-xs font-semibold text-[#777d88]">Context</p>
+            <div className="flex flex-wrap gap-2">
+              {contextFiles.map((file) => {
+                const selected = selectedContextFiles.includes(file.path);
+
+                return (
+                  <button
+                    type="button"
+                    key={file.path}
+                    onClick={() => toggleContextFile(file.path)}
+                    className={cn(
+                      'inline-flex h-8 items-center gap-2 rounded-[6px] border px-2.5 text-xs font-semibold transition-colors',
+                      selected
+                        ? 'border-[#31553a] bg-[#172219] text-[#78d16d]'
+                        : 'border-[#2a2c31] bg-[#202227] text-[#9ca1ad] hover:border-[#3a3d46]'
+                    )}
+                  >
+                    <FileTextIcon className="size-3.5" weight="bold" />
+                    {file.path}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="h-9 rounded-[6px] border border-[#2a2c31] px-3 text-xs font-semibold text-[#9ca1ad] transition-colors hover:bg-[#202227]"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={!title.trim()}
+              className="h-9 rounded-[6px] border border-[#31553a] px-3 text-xs font-semibold text-[#78d16d] transition-colors hover:bg-[#172219] disabled:cursor-not-allowed disabled:border-[#2a2c31] disabled:text-[#626874]"
+            >
+              Create task
+            </button>
+          </div>
+        </div>
+      </div>
+    </form>
+  );
+}
+
 function TaskCard({
   task,
   selected,
@@ -765,10 +1030,12 @@ function TaskCard({
 }
 
 function TasksBoard({
+  onCreateTask,
   selectedTaskId,
   onSelectTask,
   tasks,
 }: {
+  onCreateTask: (status: TaskStatus) => void;
   selectedTaskId: string;
   onSelectTask: (id: string) => void;
   tasks: Task[];
@@ -811,6 +1078,7 @@ function TasksBoard({
                 <IconButton
                   label={`Add task to ${column.label}`}
                   icon={PlusIcon}
+                  onClick={() => onCreateTask(column.id)}
                 />
               </div>
               <div className="space-y-3">
@@ -946,6 +1214,8 @@ function TaskDetailPanel({ task }: { task: Task }) {
 }
 
 function WorkspaceTasks({
+  contextFiles,
+  onCreateTask,
   projectName,
   taskView,
   onTaskViewChange,
@@ -953,6 +1223,8 @@ function WorkspaceTasks({
   onSelectTask,
   tasks,
 }: {
+  contextFiles: Project['contextFiles'];
+  onCreateTask: (input: KavbanCreateTaskInput) => string | null;
   projectName: string;
   taskView: TaskView;
   onTaskViewChange: (view: TaskView) => void;
@@ -960,19 +1232,27 @@ function WorkspaceTasks({
   onSelectTask: (id: string) => void;
   tasks: Task[];
 }) {
+  const [isCreatingTask, setIsCreatingTask] = useState(false);
+  const [taskCreateStatus, setTaskCreateStatus] =
+    useState<TaskStatus>('backlog');
   const selectedTask =
     tasks.find((task) => task.id === selectedTaskId) ?? tasks[0];
 
-  if (!selectedTask) {
-    return (
-      <main className="h-full min-w-0 flex-1 overflow-auto bg-[#101113]">
-        <TopBar title="Tasks" eyebrow={projectName} />
-        <div className="px-6 py-7 text-sm text-[#858b96]">
-          No tasks in this project yet.
-        </div>
-      </main>
-    );
-  }
+  const openCreateTask = (status: TaskStatus = 'backlog') => {
+    setTaskCreateStatus(status);
+    setIsCreatingTask(true);
+  };
+
+  const handleCreateTask = (input: KavbanCreateTaskInput) => {
+    const createdTaskId = onCreateTask(input);
+
+    if (createdTaskId) {
+      onSelectTask(createdTaskId);
+      setIsCreatingTask(false);
+    }
+
+    return createdTaskId;
+  };
 
   return (
     <div className="flex h-full min-h-0">
@@ -1009,12 +1289,45 @@ function WorkspaceTasks({
               </div>
               <IconButton label="Filter tasks" icon={FunnelSimpleIcon} />
               <IconButton label="Task display" icon={SlidersHorizontalIcon} />
-              <IconButton label="New task" icon={PlusIcon} />
+              <IconButton
+                label="New task"
+                icon={PlusIcon}
+                onClick={() => openCreateTask()}
+              />
             </>
           }
         />
-        {taskView === 'board' ? (
+        {isCreatingTask && (
+          <TaskCreatePanel
+            contextFiles={contextFiles}
+            defaultStatus={taskCreateStatus}
+            onCancel={() => setIsCreatingTask(false)}
+            onCreate={handleCreateTask}
+          />
+        )}
+        {tasks.length === 0 ? (
+          <div className="flex h-[calc(100%-73px)] flex-col items-center justify-center gap-4 px-6 py-7 text-center">
+            <ListChecksIcon className="size-9 text-[#626874]" weight="bold" />
+            <div>
+              <p className="text-sm font-semibold text-[#dce0e8]">
+                No tasks in this project yet
+              </p>
+              <p className="mt-1 text-sm text-[#858b96]">
+                Create the first task to start the board.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => openCreateTask()}
+              className="inline-flex h-9 items-center gap-2 rounded-[6px] border border-[#2a2c31] bg-[#202227] px-3 text-xs font-semibold text-[#cfd2da] transition-colors hover:border-[#3a3d46]"
+            >
+              <PlusIcon className="size-4" weight="bold" />
+              New task
+            </button>
+          </div>
+        ) : taskView === 'board' ? (
           <TasksBoard
+            onCreateTask={openCreateTask}
             selectedTaskId={selectedTaskId}
             onSelectTask={onSelectTask}
             tasks={tasks}
@@ -1027,7 +1340,7 @@ function WorkspaceTasks({
           />
         )}
       </main>
-      <TaskDetailPanel task={selectedTask} />
+      {selectedTask && <TaskDetailPanel task={selectedTask} />}
     </div>
   );
 }
@@ -1141,6 +1454,7 @@ function WorkspaceView({
   connectors,
   onBriefChange,
   onCreateProject,
+  onCreateTask,
   onProjectTabChange,
   onSelectProject,
   onSelectTask,
@@ -1156,6 +1470,7 @@ function WorkspaceView({
   connectors: Record<ConnectorId, Connector>;
   onBriefChange: (value: string) => void;
   onCreateProject: (name: string) => void;
+  onCreateTask: (input: KavbanCreateTaskInput) => string | null;
   onProjectTabChange: (tab: ProjectTab) => void;
   onSelectProject: (id: string) => void;
   onSelectTask: (id: string) => void;
@@ -1196,6 +1511,8 @@ function WorkspaceView({
         )}
         {projectTab === 'tasks' && (
           <WorkspaceTasks
+            contextFiles={project.contextFiles}
+            onCreateTask={onCreateTask}
             projectName={project.name}
             taskView={taskView}
             onTaskViewChange={onTaskViewChange}
@@ -1311,6 +1628,7 @@ export function KavbanDashboard() {
   const {
     activeProjectId,
     createProject,
+    createTask,
     inboxItems,
     profile,
     project,
@@ -1378,6 +1696,7 @@ export function KavbanDashboard() {
               connectors={project.connectors}
               onBriefChange={updateProjectBrief}
               onCreateProject={createProject}
+              onCreateTask={createTask}
               onProjectTabChange={setProjectTab}
               onSelectProject={selectProject}
               onSelectTask={setSelectedTaskId}

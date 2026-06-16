@@ -20,6 +20,7 @@ import {
   KanbanIcon,
   LightningIcon,
   ListChecksIcon,
+  LockKeyIcon,
   MagicWandIcon,
   MagnifyingGlassIcon,
   PencilSimpleIcon,
@@ -134,6 +135,8 @@ const getProfileFirstName = (profile: Profile) =>
 
 const getTaskAgent = (task: Task) => kavbanAgents[task.agentId];
 const getTaskReviewer = (task: Task) => kavbanAgents[task.reviewerId];
+const getTaskLockAgent = (task: Task) =>
+  task.lockedBy ? kavbanAgents[task.lockedBy] : null;
 const getTaskActivity = (task: Task) =>
   task.events.map((event) => event.summary);
 const getLatestTaskChangeRequest = (task: Task) => {
@@ -216,6 +219,24 @@ function BranchPill({ value }: { value: string }) {
     <span className="inline-flex h-6 items-center gap-1.5 rounded-[5px] border border-[#2a2c31] bg-[#25272b] px-2 text-xs font-medium text-[#cfd2da]">
       <GitBranchIcon className="size-3.5 text-[#58b957]" weight="bold" />
       {value}
+    </span>
+  );
+}
+
+function LockPill({ task }: { task: Task }) {
+  const lockAgent = getTaskLockAgent(task);
+
+  if (!lockAgent) {
+    return null;
+  }
+
+  return (
+    <span
+      className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-[5px] border border-[#5b4a22] bg-[#241f15] px-2 text-xs font-medium text-[#f2d14b]"
+      title={task.lockReason ?? `${lockAgent.name} owns this task`}
+    >
+      <LockKeyIcon className="size-3.5" weight="bold" />
+      {lockAgent.initials} locked
     </span>
   );
 }
@@ -1633,6 +1654,7 @@ function TaskCard({
         <span className="inline-flex size-6 items-center justify-center rounded-[5px] bg-[#282a2f] text-[#6f7682]">
           <ChartBarIcon className="size-4" weight="bold" />
         </span>
+        <LockPill task={task} />
         {task.tags.slice(0, 2).map((tag) => (
           <TagPill key={tag.label} tag={tag} />
         ))}
@@ -1757,6 +1779,7 @@ function TasksList({
                 {blockingDependencies.length > 0 && (
                   <BlockedPill count={blockingDependencies.length} />
                 )}
+                <LockPill task={task} />
                 <TestStatusPill status={task.testStatus} />
                 <ReviewStatusPill status={task.reviewStatus} />
                 {task.requiresHumanReview !== false && <HumanReviewPill />}
@@ -2156,12 +2179,16 @@ function TaskDetailPanel({
   const [isEditing, setIsEditing] = useState(false);
   const dependencyItems = getDependencyItems(task, projectTasks);
   const blockingDependencies = getBlockingDependencies(task, projectTasks);
+  const taskLockAgent = getTaskLockAgent(task);
+  const isTaskLocked = Boolean(taskLockAgent);
   const advanceAction = taskAdvanceActions[task.status];
   const isAdvanceBlocked =
-    advanceAction?.status === 'progress' && blockingDependencies.length > 0;
+    advanceAction?.status === 'progress' &&
+    (blockingDependencies.length > 0 || isTaskLocked);
   const agentRuns = task.agentRuns ?? [];
   const isRunAgentBlocked =
-    task.status === 'done' || blockingDependencies.length > 0;
+    task.status === 'done' || blockingDependencies.length > 0 || isTaskLocked;
+  const runBlockedLabel = isTaskLocked ? 'Locked' : 'Blocked';
   const reviewReports = task.reviewReports ?? [];
   const latestReviewReport = reviewReports[0];
   const latestRunUpdatedAt = agentRuns[0]?.updatedAt;
@@ -2284,6 +2311,18 @@ function TaskDetailPanel({
           </div>
         )}
 
+        {taskLockAgent && (
+          <div className="rounded-[7px] border border-[#5b4a22] bg-[#241f15] p-3">
+            <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#f2d14b]">
+              <LockKeyIcon className="size-4" weight="bold" />
+              Locked by {taskLockAgent.name}
+            </div>
+            <p className="text-sm leading-5 text-[#cdb979]">
+              {task.lockReason ?? 'Agent run in progress.'}
+            </p>
+          </div>
+        )}
+
         {task.status === 'ready' && (
           <button
             type="button"
@@ -2297,7 +2336,7 @@ function TaskDetailPanel({
             )}
           >
             <TerminalIcon className="size-4" weight="bold" />
-            {isRunAgentBlocked ? 'Blocked' : 'Run agent'}
+            {isRunAgentBlocked ? runBlockedLabel : 'Run agent'}
           </button>
         )}
 
@@ -2314,7 +2353,7 @@ function TaskDetailPanel({
             )}
           >
             <TerminalIcon className="size-4" weight="bold" />
-            {isRunAgentBlocked ? 'Blocked' : 'Rerun agent'}
+            {isRunAgentBlocked ? runBlockedLabel : 'Rerun agent'}
           </button>
         )}
 
@@ -2331,7 +2370,7 @@ function TaskDetailPanel({
             )}
           >
             <LightningIcon className="size-4" weight="bold" />
-            {isAdvanceBlocked ? 'Blocked' : advanceAction.label}
+            {isAdvanceBlocked ? runBlockedLabel : advanceAction.label}
           </button>
         )}
 
@@ -2454,6 +2493,15 @@ function TaskDetailPanel({
             ['Agent', getTaskAgent(task).name],
             ['Reviewer', getTaskReviewer(task).name],
             ['Branch', task.branch ?? 'Not planned'],
+            [
+              'Lock',
+              taskLockAgent && task.lockedAt
+                ? `${taskLockAgent.name} since ${new Date(task.lockedAt).toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}`
+                : 'Free',
+            ],
             ['PR', task.pr ?? 'Not opened'],
             ['Tests', task.testStatus ?? 'Not run'],
             ['Review', task.reviewStatus ?? 'Not reviewed'],

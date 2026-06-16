@@ -25,6 +25,8 @@ export type KavbanInboxKind = 'codex' | 'claude' | 'approval' | 'github';
 export type KavbanTaskEventKind =
   | 'task-created'
   | 'task-imported'
+  | 'task-locked'
+  | 'task-unlocked'
   | 'task-updated'
   | 'task-status-changed'
   | 'agent-started'
@@ -169,6 +171,10 @@ export type KavbanTask = {
   dependencies: string[];
   contextFiles: string[];
   intake?: KavbanTaskIntake;
+  lockedBy?: KavbanAgentId;
+  lockedAt?: string;
+  lockRunId?: string;
+  lockReason?: string;
   agentRuns?: KavbanAgentRun[];
   testStatus?: KavbanCheckStatus | 'not-run';
   reviewReports?: KavbanReviewReport[];

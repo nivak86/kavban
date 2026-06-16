@@ -1000,6 +1000,7 @@ export function useKavbanLocalStore() {
       if (
         !taskToRun ||
         taskToRun.status === 'done' ||
+        taskToRun.lockedBy ||
         hasBlockingDependencies(taskToRun, activeProject.tasks)
       ) {
         return null;
@@ -1025,6 +1026,12 @@ export function useKavbanLocalStore() {
         ),
         checks: [],
         logs: [
+          {
+            id: `log-${runId}-lock`,
+            level: 'info' as const,
+            message: `Locked task for ${kavbanAgents[taskToRun.agentId].name}.`,
+            createdAt: updatedAt,
+          },
           {
             id: `log-${runId}-branch`,
             level: 'info' as const,
@@ -1071,10 +1078,21 @@ export function useKavbanLocalStore() {
                         status: 'progress',
                         state: taskStateByStatus.progress,
                         branch,
+                        lockedBy: task.agentId,
+                        lockedAt: updatedAt,
+                        lockRunId: runId,
+                        lockReason: `Agent run ${runId} is in progress.`,
                         testStatus: 'not-run',
                         agentRuns: [run, ...(task.agentRuns ?? [])],
                         events: [
                           ...task.events,
+                          {
+                            id: `evt-${runId}-locked`,
+                            kind: 'task-locked',
+                            actor: 'system',
+                            summary: `${kavbanAgents[task.agentId].name} locked task for execution.`,
+                            createdAt: updatedAt,
+                          },
                           {
                             id: `evt-${runId}-started`,
                             kind: 'agent-started',
@@ -1127,6 +1145,7 @@ export function useKavbanLocalStore() {
         input.status === 'passed' ? 'tests-passed' : 'tests-failed';
       const runStatus = input.status === 'passed' ? 'completed' : 'failed';
       const logLevel = input.status === 'passed' ? 'success' : 'error';
+      const releasesCurrentLock = taskToUpdate.lockRunId === runId;
 
       setState((current) => ({
         ...current,
@@ -1135,9 +1154,17 @@ export function useKavbanLocalStore() {
             ? {
                 ...project,
                 tasks: project.tasks.map((task) =>
-                  task.id === taskId
+                      task.id === taskId
                     ? {
                         ...task,
+                        ...(releasesCurrentLock
+                          ? {
+                              lockedBy: undefined,
+                              lockedAt: undefined,
+                              lockRunId: undefined,
+                              lockReason: undefined,
+                            }
+                          : {}),
                         testStatus: input.status,
                         agentRuns: task.agentRuns?.map((run) =>
                           run.id === runId
@@ -1176,6 +1203,17 @@ export function useKavbanLocalStore() {
                             summary: `${command} ${input.status}.`,
                             createdAt: updatedAt,
                           },
+                          ...(releasesCurrentLock
+                            ? [
+                                {
+                                  id: `evt-${checkId}-unlocked`,
+                                  kind: 'task-unlocked' as const,
+                                  actor: 'system' as const,
+                                  summary: `Task lock released after ${runStatus} run.`,
+                                  createdAt: updatedAt,
+                                },
+                              ]
+                            : []),
                         ],
                       }
                     : task

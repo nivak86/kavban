@@ -79,8 +79,16 @@ function normalizeKavbanProject(project: KavbanProject): KavbanProject {
       ) {
         return {
           ...task,
+          approvalStatus: task.approvalStatus ?? 'approved',
           status: 'pr-created',
           state: 'PR created',
+        };
+      }
+
+      if (task.status === 'pr-created' && !task.approvalStatus) {
+        return {
+          ...task,
+          approvalStatus: 'approved',
         };
       }
 

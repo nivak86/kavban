@@ -2418,6 +2418,7 @@ function TaskDetailPanel({
   onRecordHumanReview,
   onRecordRunCheck,
   onStartAgentRun,
+  onClose,
   onUpdateTask,
   projectTasks,
   repository,
@@ -2446,6 +2447,7 @@ function TaskDetailPanel({
     input: KavbanRecordRunCheckInput
   ) => boolean;
   onStartAgentRun: (taskId: string) => string | null;
+  onClose?: () => void;
   onUpdateTask: (taskId: string, input: KavbanUpdateTaskInput) => boolean;
   projectTasks: Task[];
   repository: Project['repository'];
@@ -2567,6 +2569,13 @@ function TaskDetailPanel({
             {task.key}
           </span>
           <div className="flex items-center gap-1">
+            {onClose && (
+              <IconButton
+                label="Close task details"
+                icon={XIcon}
+                onClick={onClose}
+              />
+            )}
             <IconButton
               label="Edit task"
               icon={PencilSimpleIcon}
@@ -3453,6 +3462,7 @@ function WorkspaceTasks({
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isImportingTask, setIsImportingTask] = useState(false);
   const [isProjectMenuOpen, setIsProjectMenuOpen] = useState(false);
+  const [isBoardDetailOpen, setIsBoardDetailOpen] = useState(false);
   const [taskSearch, setTaskSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | TaskStatus>('all');
   const [agentFilter, setAgentFilter] = useState<'all' | KavbanAgentId>('all');
@@ -3514,6 +3524,22 @@ function WorkspaceTasks({
     setIsImportingTask(false);
   };
 
+  const handleSelectTask = (taskId: string) => {
+    onSelectTask(taskId);
+
+    if (taskView === 'board') {
+      setIsBoardDetailOpen(true);
+    }
+  };
+
+  const handleTaskViewChange = (view: TaskView) => {
+    if (view === 'board') {
+      setIsBoardDetailOpen(false);
+    }
+
+    onTaskViewChange(view);
+  };
+
   const resetTaskFilters = () => {
     setTaskSearch('');
     setStatusFilter('all');
@@ -3525,6 +3551,7 @@ function WorkspaceTasks({
 
     if (createdTaskId) {
       onSelectTask(createdTaskId);
+      setIsBoardDetailOpen(taskView === 'board');
       setIsCreatingTask(false);
     }
 
@@ -3542,6 +3569,7 @@ function WorkspaceTasks({
 
     if (importedTask) {
       onSelectTask(importedTask.taskId);
+      setIsBoardDetailOpen(taskView === 'board');
       setIsImportingTask(false);
     }
 
@@ -3554,6 +3582,7 @@ function WorkspaceTasks({
 
     if (deleted && remainingTask) {
       onSelectTask(remainingTask.id);
+      setIsBoardDetailOpen(false);
     }
 
     return deleted;
@@ -3581,6 +3610,7 @@ function WorkspaceTasks({
 
     if (startedTasks.length > 0) {
       onSelectTask(startedTasks[0].task.id);
+      setIsBoardDetailOpen(taskView === 'board');
     }
 
     setQueueSummary(
@@ -3664,7 +3694,7 @@ function WorkspaceTasks({
               label={taskView === 'board' ? 'Show list view' : 'Show board view'}
               icon={taskView === 'board' ? ListChecksIcon : KanbanIcon}
               onClick={() =>
-                onTaskViewChange(taskView === 'board' ? 'list' : 'board')
+                handleTaskViewChange(taskView === 'board' ? 'list' : 'board')
               }
             />
           </div>
@@ -3821,7 +3851,7 @@ function WorkspaceTasks({
             onCreateTask={openCreateTask}
             projectTasks={tasks}
             selectedTaskId={selectedTaskId}
-            onSelectTask={onSelectTask}
+            onSelectTask={handleSelectTask}
             tasks={filteredTasks}
           />
         ) : (
@@ -3830,12 +3860,12 @@ function WorkspaceTasks({
             contextFiles={contextFiles}
             projectTasks={tasks}
             selectedTaskId={selectedTaskId}
-            onSelectTask={onSelectTask}
+            onSelectTask={handleSelectTask}
             tasks={filteredTasks}
           />
         )}
       </main>
-      {selectedTask && taskView === 'list' && (
+      {selectedTask && (taskView === 'list' || isBoardDetailOpen) && (
         <TaskDetailPanel
           connectors={connectors}
           contextFiles={contextFiles}
@@ -3850,6 +3880,9 @@ function WorkspaceTasks({
           onRecordHumanReview={onRecordHumanReview}
           onRecordRunCheck={onRecordRunCheck}
           onStartAgentRun={onStartAgentRun}
+          onClose={
+            taskView === 'board' ? () => setIsBoardDetailOpen(false) : undefined
+          }
           onUpdateTask={onUpdateTask}
           projectTasks={tasks}
           repository={repository}

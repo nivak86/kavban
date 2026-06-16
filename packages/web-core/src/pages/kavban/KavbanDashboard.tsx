@@ -1,4 +1,4 @@
-import { useMemo, useState, type ComponentType } from 'react';
+import { useEffect, useMemo, useState, type ComponentType } from 'react';
 import type { IconProps } from '@phosphor-icons/react';
 import {
   ArchiveIcon,
@@ -38,15 +38,17 @@ import { cn } from '@/shared/lib/utils';
 import {
   kavbanAgents,
   kavbanConnectorOrder,
-  kavbanInboxItems,
-  kavbanProfile,
-  kavbanProject,
+  kavbanWorkflowColumns,
+  useKavbanLocalStore,
 } from './model';
 import type {
   KavbanAgent as Agent,
   KavbanConnector as Connector,
   KavbanConnectorId as ConnectorId,
   KavbanInboxKind,
+  KavbanInboxItem as InboxItem,
+  KavbanProfile as Profile,
+  KavbanProject as Project,
   KavbanTag as Tag,
   KavbanTask as Task,
   KavbanTaskStatus as TaskStatus,
@@ -81,13 +83,9 @@ const inboxIconByKind: Record<KavbanInboxKind, PhosphorIcon> = {
   github: GithubLogoIcon,
 };
 
-const workflowColumns = kavbanProject.workflowColumns;
-const initialTasks = kavbanProject.tasks;
-const inboxItems = kavbanInboxItems;
-const startingConnectors = kavbanProject.connectors;
-const projectBrief = kavbanProject.brief;
-const profileFirstName =
-  kavbanProfile.displayName.split(' ')[0] || kavbanProfile.displayName;
+const workflowColumns = kavbanWorkflowColumns;
+const getProfileFirstName = (profile: Profile) =>
+  profile.displayName.split(' ')[0] || profile.displayName;
 
 const getTaskAgent = (task: Task) => kavbanAgents[task.agentId];
 const getTaskReviewer = (task: Task) => kavbanAgents[task.reviewerId];
@@ -174,9 +172,11 @@ function IconButton({
 function Sidebar({
   activeSection,
   onSectionChange,
+  profile,
 }: {
   activeSection: AppSection;
   onSectionChange: (section: AppSection) => void;
+  profile: Profile;
 }) {
   const topItems: { id: AppSection; label: string; icon: PhosphorIcon }[] = [
     { id: 'inbox', label: 'Inbox', icon: ArchiveIcon },
@@ -239,7 +239,7 @@ function Sidebar({
           <span className="flex size-6 items-center justify-center rounded-full border border-[#353841] bg-[#202227]">
             <UserIcon className="size-4" weight="bold" />
           </span>
-          {profileFirstName}
+          {getProfileFirstName(profile)}
         </button>
       </div>
     </aside>
@@ -279,14 +279,18 @@ function TopBar({
 }
 
 function InboxView({
+  inboxItems,
   selectedInboxId,
   onSelectInbox,
+  tasks,
 }: {
+  inboxItems: InboxItem[];
   selectedInboxId: string;
   onSelectInbox: (id: string) => void;
+  tasks: Task[];
 }) {
   const selected = inboxItems.find((item) => item.id === selectedInboxId);
-  const task = initialTasks.find((item) => item.key === selected?.taskKey);
+  const task = tasks.find((item) => item.key === selected?.taskKey);
 
   return (
     <div className="grid h-full min-h-0 grid-cols-[minmax(320px,38%)_1fr]">
@@ -461,17 +465,37 @@ function ProjectTabs({
 function WorkspaceHome({
   connectors,
   onTabChange,
+  project,
 }: {
   connectors: Record<ConnectorId, Connector>;
   onTabChange: (tab: ProjectTab) => void;
+  project: Project;
 }) {
+  const countTasks = (statuses: TaskStatus[]) =>
+    project.tasks.filter((task) => statuses.includes(task.status)).length;
+
   const stats = [
-    { label: 'Ready', value: '1', icon: LightningIcon, color: '#f2d14b' },
-    { label: 'Running', value: '1', icon: CircleIcon, color: '#f2d14b' },
-    { label: 'In review', value: '2', icon: MagicWandIcon, color: '#6aa7ff' },
+    {
+      label: 'Ready',
+      value: String(countTasks(['ready'])),
+      icon: LightningIcon,
+      color: '#f2d14b',
+    },
+    {
+      label: 'Running',
+      value: String(countTasks(['progress'])),
+      icon: CircleIcon,
+      color: '#f2d14b',
+    },
+    {
+      label: 'In review',
+      value: String(countTasks(['ai-review', 'human-review'])),
+      icon: MagicWandIcon,
+      color: '#6aa7ff',
+    },
     {
       label: 'Human gates',
-      value: '1',
+      value: String(countTasks(['human-review'])),
       icon: ShieldCheckIcon,
       color: '#f26d6d',
     },
@@ -511,7 +535,7 @@ function WorkspaceHome({
           <section className="rounded-[8px] border border-[#24262b] bg-[#17181b] p-5">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-[#dce0e8]">
-                {kavbanProject.name}
+                {project.name}
               </h2>
               <button
                 type="button"
@@ -522,9 +546,9 @@ function WorkspaceHome({
                 Project settings
               </button>
             </div>
-            <p className="text-sm leading-7 text-[#9aa0aa]">{projectBrief}</p>
+            <p className="text-sm leading-7 text-[#9aa0aa]">{project.brief}</p>
             <div className="mt-6 grid gap-3 md:grid-cols-3">
-              {kavbanProject.contextFiles.map((file) => (
+              {project.contextFiles.map((file) => (
                 <div
                   key={file.path}
                   className="rounded-[7px] border border-[#24262b] bg-[#111214] p-3"
@@ -642,22 +666,22 @@ function TaskCard({
 function TasksBoard({
   selectedTaskId,
   onSelectTask,
+  tasks,
 }: {
   selectedTaskId: string;
   onSelectTask: (id: string) => void;
+  tasks: Task[];
 }) {
   const tasksByStatus = useMemo(
     () =>
       workflowColumns.reduce<Record<TaskStatus, Task[]>>(
         (acc, column) => {
-          acc[column.id] = initialTasks.filter(
-            (task) => task.status === column.id
-          );
+          acc[column.id] = tasks.filter((task) => task.status === column.id);
           return acc;
         },
         {} as Record<TaskStatus, Task[]>
       ),
-    []
+    [tasks]
   );
 
   return (
@@ -709,14 +733,16 @@ function TasksBoard({
 function TasksList({
   selectedTaskId,
   onSelectTask,
+  tasks,
 }: {
   selectedTaskId: string;
   onSelectTask: (id: string) => void;
+  tasks: Task[];
 }) {
   return (
     <div className="min-w-[980px] px-6 py-7">
       <div className="space-y-1">
-        {initialTasks.map((task) => (
+        {tasks.map((task) => (
           <button
             type="button"
             key={task.id}
@@ -819,25 +845,40 @@ function TaskDetailPanel({ task }: { task: Task }) {
 }
 
 function WorkspaceTasks({
+  projectName,
   taskView,
   onTaskViewChange,
   selectedTaskId,
   onSelectTask,
+  tasks,
 }: {
+  projectName: string;
   taskView: TaskView;
   onTaskViewChange: (view: TaskView) => void;
   selectedTaskId: string;
   onSelectTask: (id: string) => void;
+  tasks: Task[];
 }) {
   const selectedTask =
-    initialTasks.find((task) => task.id === selectedTaskId) ?? initialTasks[0];
+    tasks.find((task) => task.id === selectedTaskId) ?? tasks[0];
+
+  if (!selectedTask) {
+    return (
+      <main className="h-full min-w-0 flex-1 overflow-auto bg-[#101113]">
+        <TopBar title="Tasks" eyebrow={projectName} />
+        <div className="px-6 py-7 text-sm text-[#858b96]">
+          No tasks in this project yet.
+        </div>
+      </main>
+    );
+  }
 
   return (
     <div className="flex h-full min-h-0">
       <main className="min-w-0 flex-1 overflow-auto bg-[#101113]">
         <TopBar
           title="Tasks"
-          eyebrow={kavbanProject.name}
+          eyebrow={projectName}
           rightSlot={
             <>
               <div className="mr-2 flex shrink-0 rounded-[7px] bg-[#191b1f] p-1">
@@ -875,11 +916,13 @@ function WorkspaceTasks({
           <TasksBoard
             selectedTaskId={selectedTaskId}
             onSelectTask={onSelectTask}
+            tasks={tasks}
           />
         ) : (
           <TasksList
             selectedTaskId={selectedTaskId}
             onSelectTask={onSelectTask}
+            tasks={tasks}
           />
         )}
       </main>
@@ -993,32 +1036,32 @@ function WorkspaceSettings({
 }
 
 function WorkspaceView({
-  projectTab,
-  onProjectTabChange,
-  taskView,
-  onTaskViewChange,
-  selectedTaskId,
-  onSelectTask,
-  brief,
-  onBriefChange,
   connectors,
+  onBriefChange,
+  onProjectTabChange,
+  onSelectTask,
+  onTaskViewChange,
   onToggleConnector,
+  project,
+  projectTab,
+  selectedTaskId,
+  taskView,
 }: {
-  projectTab: ProjectTab;
-  onProjectTabChange: (tab: ProjectTab) => void;
-  taskView: TaskView;
-  onTaskViewChange: (view: TaskView) => void;
-  selectedTaskId: string;
-  onSelectTask: (id: string) => void;
-  brief: string;
-  onBriefChange: (value: string) => void;
   connectors: Record<ConnectorId, Connector>;
+  onBriefChange: (value: string) => void;
+  onProjectTabChange: (tab: ProjectTab) => void;
+  onSelectTask: (id: string) => void;
+  onTaskViewChange: (view: TaskView) => void;
   onToggleConnector: (id: ConnectorId) => void;
+  project: Project;
+  projectTab: ProjectTab;
+  selectedTaskId: string;
+  taskView: TaskView;
 }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <TopBar
-        title={kavbanProject.name}
+        title={project.name}
         eyebrow="Workspace"
         rightSlot={
           <>
@@ -1035,19 +1078,22 @@ function WorkspaceView({
           <WorkspaceHome
             connectors={connectors}
             onTabChange={onProjectTabChange}
+            project={project}
           />
         )}
         {projectTab === 'tasks' && (
           <WorkspaceTasks
+            projectName={project.name}
             taskView={taskView}
             onTaskViewChange={onTaskViewChange}
             selectedTaskId={selectedTaskId}
             onSelectTask={onSelectTask}
+            tasks={project.tasks}
           />
         )}
         {projectTab === 'settings' && (
           <WorkspaceSettings
-            brief={brief}
+            brief={project.brief}
             onBriefChange={onBriefChange}
             connectors={connectors}
             onToggleConnector={onToggleConnector}
@@ -1107,10 +1153,10 @@ function SettingsView() {
   );
 }
 
-function ProfileView() {
+function ProfileView({ profile }: { profile: Profile }) {
   return (
     <div className="h-full overflow-y-auto bg-[#101113]">
-      <TopBar title={profileFirstName} eyebrow="Profile" />
+      <TopBar title={getProfileFirstName(profile)} eyebrow="Profile" />
       <div className="mx-auto max-w-4xl px-6 py-7">
         <section className="rounded-[8px] border border-[#24262b] bg-[#17181b] p-5">
           <div className="mb-6 flex items-center gap-4">
@@ -1119,20 +1165,17 @@ function ProfileView() {
             </span>
             <div>
               <h2 className="text-lg font-semibold text-[#dce0e8]">
-                {kavbanProfile.displayName}
+                {profile.displayName}
               </h2>
-              <p className="text-sm text-[#858b96]">{kavbanProfile.role}</p>
+              <p className="text-sm text-[#858b96]">{profile.role}</p>
             </div>
           </div>
 
           <div className="grid gap-3 md:grid-cols-3">
             {[
-              [
-                'Default agent',
-                kavbanAgents[kavbanProfile.defaultAgentId].name,
-              ],
-              ['Reviewer', kavbanAgents[kavbanProfile.reviewerAgentId].name],
-              ['Human gate', kavbanProfile.humanGate],
+              ['Default agent', kavbanAgents[profile.defaultAgentId].name],
+              ['Reviewer', kavbanAgents[profile.reviewerAgentId].name],
+              ['Human gate', profile.humanGate],
             ].map(([label, value]) => (
               <div
                 key={label}
@@ -1152,27 +1195,41 @@ function ProfileView() {
 }
 
 export function KavbanDashboard() {
+  const { inboxItems, profile, project, updateConnector, updateProjectBrief } =
+    useKavbanLocalStore();
   const [activeSection, setActiveSection] = useState<AppSection>('workspace');
   const [projectTab, setProjectTab] = useState<ProjectTab>('tasks');
   const [taskView, setTaskView] = useState<TaskView>('board');
-  const [selectedTaskId, setSelectedTaskId] = useState(initialTasks[2].id);
-  const [selectedInboxId, setSelectedInboxId] = useState(inboxItems[0].id);
-  const [brief, setBrief] = useState(projectBrief);
-  const [connectors, setConnectors] =
-    useState<Record<ConnectorId, Connector>>(startingConnectors);
+  const [selectedTaskId, setSelectedTaskId] = useState('kav-000123');
+  const [selectedInboxId, setSelectedInboxId] = useState('inbox-1');
+
+  useEffect(() => {
+    if (
+      project.tasks.length > 0 &&
+      !project.tasks.some((task) => task.id === selectedTaskId)
+    ) {
+      setSelectedTaskId(project.tasks[0].id);
+    }
+  }, [project.tasks, selectedTaskId]);
+
+  useEffect(() => {
+    if (
+      inboxItems.length > 0 &&
+      !inboxItems.some((item) => item.id === selectedInboxId)
+    ) {
+      setSelectedInboxId(inboxItems[0].id);
+    }
+  }, [inboxItems, selectedInboxId]);
 
   const toggleConnector = (id: ConnectorId) => {
-    setConnectors((current) => ({
-      ...current,
-      [id]: {
-        ...current[id],
-        connected: !current[id].connected,
-        status: current[id].connected
-          ? 'Needs auth'
-          : id === 'github'
-            ? 'nivak86/kavban'
-            : 'Ready',
-      },
+    updateConnector(id, (connector) => ({
+      ...connector,
+      connected: !connector.connected,
+      status: connector.connected
+        ? 'Needs auth'
+        : id === 'github'
+          ? `${project.repository.owner}/${project.repository.name}`
+          : 'Ready',
     }));
   };
 
@@ -1182,30 +1239,33 @@ export function KavbanDashboard() {
         <Sidebar
           activeSection={activeSection}
           onSectionChange={setActiveSection}
+          profile={profile}
         />
         <main className="min-w-0 flex-1 overflow-hidden">
           {activeSection === 'inbox' && (
             <InboxView
+              inboxItems={inboxItems}
               selectedInboxId={selectedInboxId}
               onSelectInbox={setSelectedInboxId}
+              tasks={project.tasks}
             />
           )}
           {activeSection === 'workspace' && (
             <WorkspaceView
-              projectTab={projectTab}
+              connectors={project.connectors}
+              onBriefChange={updateProjectBrief}
               onProjectTabChange={setProjectTab}
-              taskView={taskView}
-              onTaskViewChange={setTaskView}
-              selectedTaskId={selectedTaskId}
               onSelectTask={setSelectedTaskId}
-              brief={brief}
-              onBriefChange={setBrief}
-              connectors={connectors}
+              onTaskViewChange={setTaskView}
               onToggleConnector={toggleConnector}
+              project={project}
+              projectTab={projectTab}
+              selectedTaskId={selectedTaskId}
+              taskView={taskView}
             />
           )}
           {activeSection === 'settings' && <SettingsView />}
-          {activeSection === 'profile' && <ProfileView />}
+          {activeSection === 'profile' && <ProfileView profile={profile} />}
         </main>
       </div>
     </div>

@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kavban.local/schemas/kavban-intake.schema.json",
+  "title": "KAVBAN Codex Intake Task",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "project",
+    "title",
+    "description",
+    "type",
+    "priority",
+    "suggested_agent",
+    "requires_human_review",
+    "dependencies",
+    "context_tags"
+  ],
+  "properties": {
+    "project": {
+      "type": "string",
+      "minLength": 1
+    },
+    "title": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 160
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1
+    },
+    "type": {
+      "type": "string",
+      "enum": ["feature", "bug", "refactor", "test", "docs", "ops", "research"]
+    },
+    "priority": {
+      "type": "string",
+      "enum": ["low", "medium", "high", "urgent"]
+    },
+    "suggested_agent": {
+      "type": "string",
+      "enum": ["codex", "claude", "gemini", "auto"]
+    },
+    "requires_human_review": {
+      "type": "boolean"
+    },
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "context_tags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  }
+}

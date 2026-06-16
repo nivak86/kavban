@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 
-const BASE_TITLE = 'Vibe Kanban';
+const BASE_TITLE = 'Kavban';
 
 /**
  * Sets the document title based on the given parts.

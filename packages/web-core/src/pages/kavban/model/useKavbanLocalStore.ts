@@ -1273,6 +1273,8 @@ export function useKavbanLocalStore() {
       const eventKind: KavbanTaskEventKind =
         input.status === 'passed' ? 'tests-passed' : 'tests-failed';
       const runStatus = input.status === 'passed' ? 'completed' : 'failed';
+      const nextTaskStatus: KavbanTaskStatus =
+        input.status === 'passed' ? 'ai-review' : 'fix-required';
       const logLevel = input.status === 'passed' ? 'success' : 'error';
       const releasesCurrentLock = taskToUpdate.lockRunId === runId;
 
@@ -1283,11 +1285,13 @@ export function useKavbanLocalStore() {
             ? {
                 ...project,
                 tasks: project.tasks.map((task) =>
-                      task.id === taskId
+                  task.id === taskId
                     ? {
                         ...task,
                         ...(releasesCurrentLock
                           ? {
+                              status: nextTaskStatus,
+                              state: taskStateByStatus[nextTaskStatus],
                               lockedBy: undefined,
                               lockedAt: undefined,
                               lockRunId: undefined,
@@ -1339,6 +1343,13 @@ export function useKavbanLocalStore() {
                                   kind: 'task-unlocked' as const,
                                   actor: 'system' as const,
                                   summary: `Task lock released after ${runStatus} run.`,
+                                  createdAt: updatedAt,
+                                },
+                                {
+                                  id: `evt-${checkId}-status`,
+                                  kind: 'task-status-changed' as const,
+                                  actor: 'system' as const,
+                                  summary: `Task moved to ${taskStateByStatus[nextTaskStatus]} after ${runStatus} run.`,
                                   createdAt: updatedAt,
                                 },
                               ]

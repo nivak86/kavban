@@ -963,6 +963,7 @@ function WaitingPill({ summary }: { summary: TaskBlockerSummary }) {
 function QueueMonitor({
   activeRunTasks,
   onDismissSummary,
+  onRecordActiveRunCheck,
   onSelectTask,
   queueSummary,
   readyItems,
@@ -971,6 +972,11 @@ function QueueMonitor({
 }: {
   activeRunTasks: Task[];
   onDismissSummary: () => void;
+  onRecordActiveRunCheck: (
+    taskId: string,
+    runId: string,
+    status: 'failed' | 'passed'
+  ) => void;
   onSelectTask: (taskId: string) => void;
   queueSummary: string;
   readyItems: QueueTaskItem[];
@@ -1093,25 +1099,58 @@ function QueueMonitor({
                 Active runs
               </div>
               <div className="space-y-1">
-                {activeRunTasks.slice(0, 4).map((task) => (
-                  <button
-                    key={task.id}
-                    type="button"
-                    onClick={() => onSelectTask(task.id)}
-                    className="grid min-h-10 w-full grid-cols-[72px_minmax(0,1fr)_auto] items-center gap-2 rounded-[6px] px-2 text-left text-xs transition-colors hover:bg-[#202227]"
-                  >
-                    <span className="font-ibm-plex-mono text-[#777d88]">
-                      {task.key}
-                    </span>
-                    <span className="min-w-0 truncate font-semibold text-[#cfd2da]">
-                      {task.title}
-                    </span>
-                    <span className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-[5px] border border-[#334b70] bg-[#141c2a] px-2 text-xs font-medium text-[#8bbcff]">
-                      <TerminalIcon className="size-3.5" weight="bold" />
-                      {getTaskAgent(task).name}
-                    </span>
-                  </button>
-                ))}
+                {activeRunTasks.slice(0, 4).map((task) => {
+                  const runId = task.lockRunId;
+
+                  return (
+                    <div
+                      key={task.id}
+                      className="grid min-h-10 w-full grid-cols-[72px_minmax(0,1fr)_auto_auto_auto] items-center gap-2 rounded-[6px] px-2 text-xs transition-colors hover:bg-[#202227]"
+                    >
+                      <span className="font-ibm-plex-mono text-[#777d88]">
+                        {task.key}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => onSelectTask(task.id)}
+                        className="min-w-0 truncate text-left font-semibold text-[#cfd2da]"
+                      >
+                        {task.title}
+                      </button>
+                      <span className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-[5px] border border-[#334b70] bg-[#141c2a] px-2 text-xs font-medium text-[#8bbcff]">
+                        <TerminalIcon className="size-3.5" weight="bold" />
+                        {getTaskAgent(task).name}
+                      </span>
+                      {runId && (
+                        <>
+                          <button
+                            type="button"
+                            aria-label={`Mark ${task.key} checks passed`}
+                            onClick={() =>
+                              onRecordActiveRunCheck(task.id, runId, 'passed')
+                            }
+                            className="flex size-6 shrink-0 items-center justify-center rounded-[5px] border border-[#31553a] bg-[#172219] text-[#78d16d] transition-colors hover:border-[#427049]"
+                          >
+                            <CheckCircleIcon
+                              className="size-3.5"
+                              weight="fill"
+                            />
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={`Mark ${task.key} checks failed`}
+                            onClick={() =>
+                              onRecordActiveRunCheck(task.id, runId, 'failed')
+                            }
+                            className="flex size-6 shrink-0 items-center justify-center rounded-[5px] border border-[#553131] bg-[#211719] text-[#f26d6d] transition-colors hover:border-[#6b3b3b]"
+                          >
+                            <XIcon className="size-3.5" weight="bold" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -4503,6 +4542,16 @@ function WorkspaceTasks({
         <QueueMonitor
           activeRunTasks={activeRunTasks}
           onDismissSummary={() => setQueueSummary('')}
+          onRecordActiveRunCheck={(taskId, runId, status) =>
+            onRecordRunCheck(taskId, runId, {
+              command: 'pnpm test',
+              output:
+                status === 'passed'
+                  ? 'Queue monitor recorded passing checks.'
+                  : 'Queue monitor recorded failing checks.',
+              status,
+            })
+          }
           onSelectTask={handleSelectTask}
           queueSummary={queueSummary}
           readyItems={readyQueueItems}

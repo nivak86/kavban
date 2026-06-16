@@ -9,6 +9,7 @@ import { kavbanAgents, kavbanDefaultAgentRouting, kavbanProject } from './seed';
 import type {
   KavbanAgentId,
   KavbanAgentRouting,
+  KavbanApprovalStatus,
   KavbanCheckStatus,
   KavbanConnector,
   KavbanConnectorId,
@@ -41,6 +42,11 @@ export type KavbanRecordRunCheckInput = {
   status: KavbanCheckStatus;
   command?: string;
   output?: string;
+};
+
+export type KavbanRecordHumanReviewInput = {
+  status: KavbanApprovalStatus;
+  note?: string;
 };
 
 export type KavbanContextFileInput = {
@@ -932,6 +938,66 @@ export function useKavbanLocalStore() {
     [activeProject.tasks]
   );
 
+  const recordHumanReview = useCallback(
+    (taskId: string, input: KavbanRecordHumanReviewInput) => {
+      const taskToReview = activeProject.tasks.find(
+        (task) => task.id === taskId
+      );
+
+      if (!taskToReview || taskToReview.status !== 'human-review') {
+        return false;
+      }
+
+      const updatedAt = nowIso();
+      const approved = input.status === 'approved';
+      const nextStatus: KavbanTaskStatus = approved ? 'done' : 'progress';
+      const note =
+        input.note?.trim() ||
+        (approved
+          ? 'Human approved the task for merge.'
+          : 'Human requested changes from the assigned agent.');
+      const eventKind: KavbanTaskEventKind = approved
+        ? 'human-approved'
+        : 'changes-requested';
+
+      setState((current) => ({
+        ...current,
+        projects: current.projects.map((project) =>
+          project.id === current.activeProjectId
+            ? {
+                ...project,
+                tasks: project.tasks.map((task) =>
+                  task.id === taskId
+                    ? {
+                        ...task,
+                        status: nextStatus,
+                        state: taskStateByStatus[nextStatus],
+                        approvalStatus: input.status,
+                        reviewStatus: approved ? 'passed' : 'changes-requested',
+                        events: [
+                          ...task.events,
+                          {
+                            id: `evt-${taskId}-human-${Date.now().toString(36)}`,
+                            kind: eventKind,
+                            actor: 'human',
+                            summary: note,
+                            createdAt: updatedAt,
+                          },
+                        ],
+                      }
+                    : task
+                ),
+              }
+            : project
+        ),
+        updatedAt,
+      }));
+
+      return true;
+    },
+    [activeProject.tasks]
+  );
+
   const moveTask = useCallback(
     (taskId: string, status: KavbanTaskStatus) => {
       const taskToMove = activeProject.tasks.find((task) => task.id === taskId);
@@ -1017,6 +1083,7 @@ export function useKavbanLocalStore() {
     project: activeProjectWithDefaults,
     projects: state.projects,
     recordAgentRunCheck,
+    recordHumanReview,
     selectProject,
     startAgentRun,
     state,

@@ -58,6 +58,7 @@ import type {
   KavbanProfile as Profile,
   KavbanProject as Project,
   KavbanRecordRunCheckInput,
+  KavbanRecordHumanReviewInput,
   KavbanRepositoryInput,
   KavbanTag as Tag,
   KavbanTask as Task,
@@ -1832,6 +1833,7 @@ function TaskDetailPanel({
   onCreateAiReview,
   onDeleteTask,
   onMoveTask,
+  onRecordHumanReview,
   onRecordRunCheck,
   onStartAgentRun,
   onUpdateTask,
@@ -1842,6 +1844,10 @@ function TaskDetailPanel({
   onCreateAiReview: (taskId: string) => string | null;
   onDeleteTask: (taskId: string) => boolean;
   onMoveTask: (taskId: string, status: TaskStatus) => boolean;
+  onRecordHumanReview: (
+    taskId: string,
+    input: KavbanRecordHumanReviewInput
+  ) => boolean;
   onRecordRunCheck: (
     taskId: string,
     runId: string,
@@ -1989,6 +1995,37 @@ function TaskDetailPanel({
           </button>
         )}
 
+        {task.status === 'human-review' && (
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                onRecordHumanReview(task.id, {
+                  status: 'approved',
+                  note: 'Human approved the task for merge.',
+                })
+              }
+              className="flex h-9 items-center justify-center gap-2 rounded-[6px] border border-[#31553a] bg-[#172219] px-3 text-xs font-semibold text-[#78d16d] transition-colors hover:border-[#427049]"
+            >
+              <CheckCircleIcon className="size-4" weight="fill" />
+              Approve
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                onRecordHumanReview(task.id, {
+                  status: 'changes-requested',
+                  note: 'Human requested changes from the assigned agent.',
+                })
+              }
+              className="flex h-9 items-center justify-center gap-2 rounded-[6px] border border-[#553131] bg-[#211719] px-3 text-xs font-semibold text-[#f26d6d] transition-colors hover:border-[#6b3b3b]"
+            >
+              <XIcon className="size-4" weight="bold" />
+              Request changes
+            </button>
+          </div>
+        )}
+
         {blockingDependencies.length > 0 && (
           <div className="rounded-[7px] border border-[#553131] bg-[#211719] p-3">
             <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#f26d6d]">
@@ -2022,6 +2059,7 @@ function TaskDetailPanel({
             ['Branch', task.branch ?? 'Not planned'],
             ['Tests', task.testStatus ?? 'Not run'],
             ['Review', task.reviewStatus ?? 'Not reviewed'],
+            ['Approval', task.approvalStatus ?? 'Not requested'],
             [
               'Human review',
               task.requiresHumanReview === false ? 'Optional' : 'Required',
@@ -2150,6 +2188,7 @@ function WorkspaceTasks({
   onCreateTask,
   onDeleteTask,
   onMoveTask,
+  onRecordHumanReview,
   onRecordRunCheck,
   onStartAgentRun,
   onUpdateTask,
@@ -2166,6 +2205,10 @@ function WorkspaceTasks({
   onCreateTask: (input: KavbanCreateTaskInput) => string | null;
   onDeleteTask: (taskId: string) => boolean;
   onMoveTask: (taskId: string, status: TaskStatus) => boolean;
+  onRecordHumanReview: (
+    taskId: string,
+    input: KavbanRecordHumanReviewInput
+  ) => boolean;
   onRecordRunCheck: (
     taskId: string,
     runId: string,
@@ -2309,6 +2352,7 @@ function WorkspaceTasks({
           onCreateAiReview={onCreateAiReview}
           onDeleteTask={handleDeleteTask}
           onMoveTask={onMoveTask}
+          onRecordHumanReview={onRecordHumanReview}
           onRecordRunCheck={onRecordRunCheck}
           onStartAgentRun={onStartAgentRun}
           onUpdateTask={onUpdateTask}
@@ -3015,6 +3059,7 @@ function WorkspaceView({
   onDeleteTask,
   onMoveTask,
   onProjectTabChange,
+  onRecordHumanReview,
   onRecordRunCheck,
   onRepositoryChange,
   onSelectProject,
@@ -3042,6 +3087,10 @@ function WorkspaceView({
   onDeleteTask: (taskId: string) => boolean;
   onMoveTask: (taskId: string, status: TaskStatus) => boolean;
   onProjectTabChange: (tab: ProjectTab) => void;
+  onRecordHumanReview: (
+    taskId: string,
+    input: KavbanRecordHumanReviewInput
+  ) => boolean;
   onRecordRunCheck: (
     taskId: string,
     runId: string,
@@ -3096,6 +3145,7 @@ function WorkspaceView({
             onCreateTask={onCreateTask}
             onDeleteTask={onDeleteTask}
             onMoveTask={onMoveTask}
+            onRecordHumanReview={onRecordHumanReview}
             onRecordRunCheck={onRecordRunCheck}
             onStartAgentRun={onStartAgentRun}
             onUpdateTask={onUpdateTask}
@@ -3233,6 +3283,7 @@ export function KavbanDashboard() {
     project,
     projects,
     recordAgentRunCheck,
+    recordHumanReview,
     selectProject,
     startAgentRun,
     updateAgentRouting,
@@ -3309,6 +3360,7 @@ export function KavbanDashboard() {
               onDeleteTask={deleteTask}
               onMoveTask={moveTask}
               onProjectTabChange={setProjectTab}
+              onRecordHumanReview={recordHumanReview}
               onRecordRunCheck={recordAgentRunCheck}
               onRepositoryChange={updateProjectRepository}
               onSelectProject={selectProject}

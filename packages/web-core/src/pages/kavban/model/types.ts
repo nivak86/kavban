@@ -33,6 +33,8 @@ export type KavbanTaskEventKind =
   | 'review-started'
   | 'ai-review-completed'
   | 'approval-needed'
+  | 'human-approved'
+  | 'changes-requested'
   | 'pr-opened';
 
 export type KavbanRepository = {
@@ -108,6 +110,8 @@ export type KavbanAgentRun = {
 
 export type KavbanReviewStatus = 'passed' | 'changes-requested' | 'needs-human';
 
+export type KavbanApprovalStatus = 'pending' | 'approved' | 'changes-requested';
+
 export type KavbanReviewReport = {
   id: string;
   reviewerId: KavbanAgentId;
@@ -138,6 +142,7 @@ export type KavbanTask = {
   testStatus?: KavbanCheckStatus | 'not-run';
   reviewReports?: KavbanReviewReport[];
   reviewStatus?: KavbanReviewStatus;
+  approvalStatus?: KavbanApprovalStatus;
   events: KavbanTaskEvent[];
 };
 

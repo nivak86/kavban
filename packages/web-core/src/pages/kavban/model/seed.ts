@@ -276,6 +276,7 @@ const projectTasks: KavbanTask[] = [
     reviewerId: 'reviewer',
     branch: 'kav/kav-000125-human-gate',
     pr: '#55423',
+    approvalStatus: 'pending',
     tags: [
       { label: 'GitHub', color: '#78d16d' },
       { label: 'Gate', color: '#f26d6d' },

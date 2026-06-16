@@ -106,6 +106,54 @@ export const kavbanConnectorOrder: KavbanConnectorId[] = [
   'claude',
 ];
 
+export const kavbanDefaultContextFiles = [
+  {
+    path: 'kavban.project.md',
+    purpose: 'Product description, users, repository, and constraints.',
+    injected: true,
+  },
+  {
+    path: 'architecture.md',
+    purpose: 'System map, stack, services, data model, and key flows.',
+    injected: true,
+  },
+  {
+    path: 'coding-rules.md',
+    purpose: 'Style, testing, naming, commit rules, and forbidden changes.',
+    injected: true,
+  },
+  {
+    path: 'current-state.md',
+    purpose: 'Current priorities, active branches, recent decisions, and status.',
+    injected: true,
+  },
+  {
+    path: 'known-issues.md',
+    purpose: 'Bugs, technical debt, fragile areas, and things not to break.',
+    injected: true,
+  },
+  {
+    path: 'review-checklist.md',
+    purpose: 'AI and human review criteria, test checks, UI checks, and risk gates.',
+    injected: true,
+  },
+  {
+    path: 'connections.md',
+    purpose: 'GitHub repo, local path, deployment target, and secret references.',
+    injected: true,
+  },
+  {
+    path: 'agent-rules.md',
+    purpose: 'Agent routing, fallback rules, and human-review triggers.',
+    injected: true,
+  },
+  {
+    path: 'task-history.md',
+    purpose: 'Task, branch, PR, review, approval, rollback, and merge audit log.',
+    injected: true,
+  },
+];
+
 const projectTasks: KavbanTask[] = [
   {
     id: 'kav-000121',
@@ -426,23 +474,7 @@ export const kavbanProject: KavbanProject = {
   },
   agentRouting: kavbanDefaultAgentRouting,
   workflowColumns: kavbanWorkflowColumns,
-  contextFiles: [
-    {
-      path: 'kavban.project.md',
-      purpose: 'Product and operating spec',
-      injected: true,
-    },
-    {
-      path: 'architecture.md',
-      purpose: 'System map and implementation notes',
-      injected: true,
-    },
-    {
-      path: 'review-checklist.md',
-      purpose: 'AI and human review criteria',
-      injected: true,
-    },
-  ],
+  contextFiles: kavbanDefaultContextFiles,
   connectors: {
     github: {
       id: 'github',

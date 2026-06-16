@@ -1,5 +1,6 @@
 import {
   kavbanInboxItems,
+  kavbanDefaultContextFiles,
   kavbanProfile,
   kavbanProject,
   kavbanWorkflowColumns,
@@ -57,8 +58,16 @@ function normalizeKavbanProfile(profile: KavbanProfile): KavbanProfile {
 }
 
 function normalizeKavbanProject(project: KavbanProject): KavbanProject {
+  const contextPaths = new Set(project.contextFiles.map((file) => file.path));
+
   return {
     ...project,
+    contextFiles: [
+      ...project.contextFiles,
+      ...structuredClone(kavbanDefaultContextFiles).filter(
+        (file) => !contextPaths.has(file.path)
+      ),
+    ],
     workflowColumns: structuredClone(kavbanWorkflowColumns),
     tasks: project.tasks.map((task) => {
       if (

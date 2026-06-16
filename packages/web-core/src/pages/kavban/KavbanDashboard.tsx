@@ -44,6 +44,7 @@ import { cn } from '@/shared/lib/utils';
 import {
   kavbanAgents,
   kavbanConnectorOrder,
+  kavbanDefaultContextFiles,
   kavbanDefaultAgentRouting,
   kavbanNotificationRules,
   kavbanWorkflowColumns,
@@ -3987,6 +3988,16 @@ function WorkspaceSettings({
   const [draftContextPath, setDraftContextPath] = useState('');
   const [draftContextPurpose, setDraftContextPurpose] = useState('');
   const [draftContextInjected, setDraftContextInjected] = useState(true);
+  const requiredContextFilePaths = kavbanDefaultContextFiles.map(
+    (file) => file.path
+  );
+  const contextFilePathSet = new Set(contextFiles.map((file) => file.path));
+  const requiredContextFileCount = requiredContextFilePaths.filter((path) =>
+    contextFilePathSet.has(path)
+  ).length;
+  const missingRequiredContextFiles = requiredContextFilePaths.filter(
+    (path) => !contextFilePathSet.has(path)
+  );
 
   useEffect(() => {
     setDraftAgentRouting(agentRouting);
@@ -4364,11 +4375,43 @@ function WorkspaceSettings({
                 Context files
               </h2>
             </div>
-            <span className="rounded-full border border-[#2a2c31] px-2 py-1 text-xs font-semibold text-[#858b96]">
-              {contextFiles.filter((file) => file.injected).length}/
-              {contextFiles.length} injected
-            </span>
+            <div className="flex flex-wrap justify-end gap-2">
+              <span
+                className={cn(
+                  'rounded-full border px-2 py-1 text-xs font-semibold',
+                  missingRequiredContextFiles.length === 0
+                    ? 'border-[#31553a] text-[#78d16d]'
+                    : 'border-[#5b4a22] text-[#f2d14b]'
+                )}
+              >
+                {requiredContextFileCount}/{requiredContextFilePaths.length}{' '}
+                required
+              </span>
+              <span className="rounded-full border border-[#2a2c31] px-2 py-1 text-xs font-semibold text-[#858b96]">
+                {contextFiles.filter((file) => file.injected).length}/
+                {contextFiles.length} injected
+              </span>
+            </div>
           </div>
+
+          {missingRequiredContextFiles.length > 0 && (
+            <div className="mb-4 rounded-[7px] border border-[#5b4a22] bg-[#241f15] p-3">
+              <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#f2d14b]">
+                <FileTextIcon className="size-4" weight="bold" />
+                Required context missing
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {missingRequiredContextFiles.map((path) => (
+                  <span
+                    key={path}
+                    className="rounded-[5px] border border-[#5b4a22] bg-[#17181b] px-2 py-1 font-ibm-plex-mono text-xs text-[#cdb979]"
+                  >
+                    {path}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="mb-4 grid gap-3 lg:grid-cols-[1fr_1.3fr_auto_auto] lg:items-end">
             <label className="block">

@@ -152,6 +152,10 @@ function createTaskPrNumber(task: KavbanTask) {
   return `#${55000 + getTaskNumber(task)}`;
 }
 
+function createTaskRollbackPrNumber(task: KavbanTask) {
+  return `#${65000 + getTaskNumber(task)}`;
+}
+
 function getTaskDependency(
   dependency: string,
   tasks: KavbanTask[]
@@ -1094,9 +1098,16 @@ export function useKavbanLocalStore() {
         (task) => task.id === taskId
       );
 
+      const isRollbackMerge = Boolean(
+        taskToMerge?.rollbackPr && !taskToMerge.rolledBackAt
+      );
+      const activePullRequest = isRollbackMerge
+        ? taskToMerge?.rollbackPr
+        : taskToMerge?.pr;
+
       if (
         !taskToMerge ||
-        !taskToMerge.pr ||
+        !activePullRequest ||
         taskToMerge.approvalStatus !== 'approved'
       ) {
         return false;
@@ -1116,14 +1127,16 @@ export function useKavbanLocalStore() {
                         ...task,
                         status: 'done',
                         state: taskStateByStatus.done,
-                        mergedAt: updatedAt,
+                        ...(isRollbackMerge
+                          ? { rolledBackAt: updatedAt }
+                          : { mergedAt: updatedAt }),
                         events: [
                           ...task.events,
                           {
                             id: `evt-${taskId}-merge-${Date.now().toString(36)}`,
                             kind: 'merge-completed',
                             actor: 'github',
-                            summary: `PR ${task.pr} merged into ${project.repository.defaultBranch}.`,
+                            summary: `${isRollbackMerge ? 'Rollback PR' : 'PR'} ${activePullRequest} merged into ${project.repository.defaultBranch}.`,
                             createdAt: updatedAt,
                           },
                         ],
@@ -1137,6 +1150,63 @@ export function useKavbanLocalStore() {
       }));
 
       return true;
+    },
+    [activeProject.tasks]
+  );
+
+  const openRollbackPullRequest = useCallback(
+    (taskId: string) => {
+      const taskToRollback = activeProject.tasks.find(
+        (task) => task.id === taskId
+      );
+
+      if (
+        !taskToRollback ||
+        !taskToRollback.mergedAt ||
+        taskToRollback.rollbackPr
+      ) {
+        return null;
+      }
+
+      const updatedAt = nowIso();
+      const rollbackPr = createTaskRollbackPrNumber(taskToRollback);
+
+      setState((current) => ({
+        ...current,
+        projects: current.projects.map((project) =>
+          project.id === current.activeProjectId
+            ? {
+                ...project,
+                tasks: project.tasks.map((task) =>
+                  task.id === taskId
+                    ? {
+                        ...task,
+                        status: 'human-review',
+                        state: 'Rollback review',
+                        rollbackPr,
+                        rollbackOpenedAt: updatedAt,
+                        approvalStatus: 'pending',
+                        reviewStatus: 'needs-human',
+                        events: [
+                          ...task.events,
+                          {
+                            id: `evt-${taskId}-rollback-${Date.now().toString(36)}`,
+                            kind: 'rollback-opened',
+                            actor: 'github',
+                            summary: `Rollback PR ${rollbackPr} opened for ${task.pr ?? task.key}.`,
+                            createdAt: updatedAt,
+                          },
+                        ],
+                      }
+                    : task
+                ),
+              }
+            : project
+        ),
+        updatedAt,
+      }));
+
+      return rollbackPr;
     },
     [activeProject.tasks]
   );
@@ -1330,6 +1400,7 @@ export function useKavbanLocalStore() {
     inboxItems: state.inboxItems,
     mergeTaskPullRequest,
     moveTask,
+    openRollbackPullRequest,
     profile: state.profile,
     project: activeProjectWithDefaults,
     projects: state.projects,

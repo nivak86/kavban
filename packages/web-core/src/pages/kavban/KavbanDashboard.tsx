@@ -1975,6 +1975,7 @@ function TaskDetailPanel({
   onDeleteTask,
   onMergeTask,
   onMoveTask,
+  onOpenRollbackPullRequest,
   onOpenTaskPullRequest,
   onRecordHumanReview,
   onRecordRunCheck,
@@ -1992,6 +1993,7 @@ function TaskDetailPanel({
   onDeleteTask: (taskId: string) => boolean;
   onMergeTask: (taskId: string) => boolean;
   onMoveTask: (taskId: string, status: TaskStatus) => boolean;
+  onOpenRollbackPullRequest: (taskId: string) => string | null;
   onOpenTaskPullRequest: (taskId: string) => string | null;
   onRecordHumanReview: (
     taskId: string,
@@ -2033,8 +2035,12 @@ function TaskDetailPanel({
     hasUnansweredChangeRequest &&
     task.status !== 'done' &&
     task.status !== 'ready';
+  const isRollbackMerge = Boolean(task.rollbackPr && !task.rolledBackAt);
+  const activeMergePullRequest = isRollbackMerge ? task.rollbackPr : task.pr;
   const canMergeTask =
     task.status !== 'done' && task.approvalStatus === 'approved';
+  const canOpenRollback =
+    task.status === 'done' && Boolean(task.mergedAt) && !task.rollbackPr;
   const needsFreshAiReview =
     !latestReviewReport ||
     Boolean(
@@ -2212,17 +2218,32 @@ function TaskDetailPanel({
         {canMergeTask && (
           <button
             type="button"
-            disabled={!task.pr}
+            disabled={!activeMergePullRequest}
             onClick={() => onMergeTask(task.id)}
             className={cn(
               'flex h-9 w-full items-center justify-center gap-2 rounded-[6px] border px-3 text-xs font-semibold transition-colors',
-              task.pr
+              activeMergePullRequest
                 ? 'border-[#31553a] bg-[#172219] text-[#78d16d] hover:border-[#427049]'
                 : 'cursor-not-allowed border-[#553131] bg-[#211719] text-[#f26d6d]'
             )}
           >
             <GitPullRequestIcon className="size-4" weight="bold" />
-            {task.pr ? 'Merge PR' : 'Open PR before merge'}
+            {activeMergePullRequest
+              ? isRollbackMerge
+                ? 'Merge rollback PR'
+                : 'Merge PR'
+              : 'Open PR before merge'}
+          </button>
+        )}
+
+        {canOpenRollback && (
+          <button
+            type="button"
+            onClick={() => onOpenRollbackPullRequest(task.id)}
+            className="flex h-9 w-full items-center justify-center gap-2 rounded-[6px] border border-[#553131] bg-[#211719] px-3 text-xs font-semibold text-[#f26d6d] transition-colors hover:border-[#6b3b3b]"
+          >
+            <GitPullRequestIcon className="size-4" weight="bold" />
+            Open rollback PR
           </button>
         )}
 
@@ -2234,7 +2255,9 @@ function TaskDetailPanel({
                 onClick={() =>
                   onRecordHumanReview(task.id, {
                     status: 'approved',
-                    note: 'Human approved the task for merge.',
+                    note: task.rollbackPr
+                      ? 'Human approved the rollback for merge.'
+                      : 'Human approved the task for merge.',
                   })
                 }
                 className="flex h-9 items-center justify-center gap-2 rounded-[6px] border border-[#31553a] bg-[#172219] px-3 text-xs font-semibold text-[#78d16d] transition-colors hover:border-[#427049]"
@@ -2303,6 +2326,18 @@ function TaskDetailPanel({
                     minute: '2-digit',
                   })
                 : 'Not merged',
+            ],
+            ['Rollback PR', task.rollbackPr ?? 'Not opened'],
+            [
+              'Rolled back',
+              task.rolledBackAt
+                ? new Date(task.rolledBackAt).toLocaleString([], {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })
+                : 'Not rolled back',
             ],
             [
               'Human review',
@@ -2498,6 +2533,7 @@ function WorkspaceTasks({
   onDeleteTask,
   onMergeTask,
   onMoveTask,
+  onOpenRollbackPullRequest,
   onOpenTaskPullRequest,
   onRecordHumanReview,
   onRecordRunCheck,
@@ -2521,6 +2557,7 @@ function WorkspaceTasks({
   onDeleteTask: (taskId: string) => boolean;
   onMergeTask: (taskId: string) => boolean;
   onMoveTask: (taskId: string, status: TaskStatus) => boolean;
+  onOpenRollbackPullRequest: (taskId: string) => string | null;
   onOpenTaskPullRequest: (taskId: string) => string | null;
   onRecordHumanReview: (
     taskId: string,
@@ -2671,6 +2708,7 @@ function WorkspaceTasks({
           onDeleteTask={handleDeleteTask}
           onMergeTask={onMergeTask}
           onMoveTask={onMoveTask}
+          onOpenRollbackPullRequest={onOpenRollbackPullRequest}
           onOpenTaskPullRequest={onOpenTaskPullRequest}
           onRecordHumanReview={onRecordHumanReview}
           onRecordRunCheck={onRecordRunCheck}
@@ -3380,6 +3418,7 @@ function WorkspaceView({
   onDeleteTask,
   onMergeTask,
   onMoveTask,
+  onOpenRollbackPullRequest,
   onProjectTabChange,
   onOpenTaskPullRequest,
   onRecordHumanReview,
@@ -3414,6 +3453,7 @@ function WorkspaceView({
   onDeleteTask: (taskId: string) => boolean;
   onMergeTask: (taskId: string) => boolean;
   onMoveTask: (taskId: string, status: TaskStatus) => boolean;
+  onOpenRollbackPullRequest: (taskId: string) => string | null;
   onProjectTabChange: (tab: ProjectTab) => void;
   onOpenTaskPullRequest: (taskId: string) => string | null;
   onRecordHumanReview: (
@@ -3476,6 +3516,7 @@ function WorkspaceView({
             onDeleteTask={onDeleteTask}
             onMergeTask={onMergeTask}
             onMoveTask={onMoveTask}
+            onOpenRollbackPullRequest={onOpenRollbackPullRequest}
             onOpenTaskPullRequest={onOpenTaskPullRequest}
             onRecordHumanReview={onRecordHumanReview}
             onRecordRunCheck={onRecordRunCheck}
@@ -3614,6 +3655,7 @@ export function KavbanDashboard() {
     mergeTaskPullRequest,
     moveTask,
     openTaskPullRequest,
+    openRollbackPullRequest,
     profile,
     project,
     projects,
@@ -3696,6 +3738,7 @@ export function KavbanDashboard() {
               onDeleteTask={deleteTask}
               onMergeTask={mergeTaskPullRequest}
               onMoveTask={moveTask}
+              onOpenRollbackPullRequest={openRollbackPullRequest}
               onOpenTaskPullRequest={openTaskPullRequest}
               onProjectTabChange={setProjectTab}
               onRecordHumanReview={recordHumanReview}

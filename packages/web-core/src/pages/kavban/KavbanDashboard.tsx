@@ -730,11 +730,13 @@ function WorkspaceHome({
 function TaskCreatePanel({
   contextFiles,
   defaultStatus,
+  dependencyTasks,
   onCancel,
   onCreate,
 }: {
   contextFiles: Project['contextFiles'];
   defaultStatus: TaskStatus;
+  dependencyTasks: Task[];
   onCancel: () => void;
   onCreate: (input: KavbanCreateTaskInput) => string | null;
 }) {
@@ -751,6 +753,9 @@ function TaskCreatePanel({
   const [tagText, setTagText] = useState('');
   const [selectedContextFiles, setSelectedContextFiles] =
     useState(defaultContextFiles);
+  const [selectedDependencies, setSelectedDependencies] = useState<string[]>(
+    []
+  );
 
   useEffect(() => {
     setStatus(defaultStatus);
@@ -762,6 +767,14 @@ function TaskCreatePanel({
       current.includes(path)
         ? current.filter((item) => item !== path)
         : [...current, path]
+    );
+  };
+
+  const toggleDependency = (key: string) => {
+    setSelectedDependencies((current) =>
+      current.includes(key)
+        ? current.filter((item) => item !== key)
+        : [...current, key]
     );
   };
 
@@ -779,6 +792,7 @@ function TaskCreatePanel({
           agentId,
           reviewerId,
           tagLabels: tagText.split(','),
+          dependencies: selectedDependencies,
           contextFiles: selectedContextFiles,
         });
 
@@ -789,6 +803,7 @@ function TaskCreatePanel({
         setTitle('');
         setDescription('');
         setTagText('');
+        setSelectedDependencies([]);
       }}
     >
       <div className="grid gap-4 xl:grid-cols-[minmax(280px,1.2fr)_0.8fr]">
@@ -960,6 +975,43 @@ function TaskCreatePanel({
               })}
             </div>
           </div>
+
+          {dependencyTasks.length > 0 && (
+            <div>
+              <p className="mb-2 text-xs font-semibold text-[#777d88]">
+                Dependencies
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {dependencyTasks.map((dependency) => {
+                  const selected = selectedDependencies.includes(
+                    dependency.key
+                  );
+
+                  return (
+                    <button
+                      type="button"
+                      key={dependency.id}
+                      onClick={() => toggleDependency(dependency.key)}
+                      className={cn(
+                        'inline-flex h-8 max-w-full items-center gap-2 rounded-[6px] border px-2.5 text-xs font-semibold transition-colors',
+                        selected
+                          ? 'border-[#31553a] bg-[#172219] text-[#78d16d]'
+                          : 'border-[#2a2c31] bg-[#202227] text-[#9ca1ad] hover:border-[#3a3d46]'
+                      )}
+                    >
+                      <GitBranchIcon className="size-3.5" weight="bold" />
+                      <span className="font-ibm-plex-mono">
+                        {dependency.key}
+                      </span>
+                      <span className="max-w-[150px] truncate">
+                        {dependency.title}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div className="flex items-center justify-end gap-2">
             <button
@@ -1149,11 +1201,13 @@ function TasksList({
 
 function TaskEditForm({
   contextFiles,
+  dependencyTasks,
   onCancel,
   onSave,
   task,
 }: {
   contextFiles: Project['contextFiles'];
+  dependencyTasks: Task[];
   onCancel: () => void;
   onSave: (input: KavbanUpdateTaskInput) => boolean;
   task: Task;
@@ -1170,6 +1224,9 @@ function TaskEditForm({
   const [selectedContextFiles, setSelectedContextFiles] = useState(
     task.contextFiles
   );
+  const [selectedDependencies, setSelectedDependencies] = useState(
+    task.dependencies
+  );
 
   useEffect(() => {
     setTitle(task.title);
@@ -1180,6 +1237,7 @@ function TaskEditForm({
     setReviewerId(task.reviewerId);
     setTagText(task.tags.map((tag) => tag.label).join(', '));
     setSelectedContextFiles(task.contextFiles);
+    setSelectedDependencies(task.dependencies);
   }, [task]);
 
   const toggleContextFile = (path: string) => {
@@ -1187,6 +1245,14 @@ function TaskEditForm({
       current.includes(path)
         ? current.filter((item) => item !== path)
         : [...current, path]
+    );
+  };
+
+  const toggleDependency = (key: string) => {
+    setSelectedDependencies((current) =>
+      current.includes(key)
+        ? current.filter((item) => item !== key)
+        : [...current, key]
     );
   };
 
@@ -1204,6 +1270,7 @@ function TaskEditForm({
           agentId,
           reviewerId,
           tagLabels: tagText.split(','),
+          dependencies: selectedDependencies,
           contextFiles: selectedContextFiles,
         });
 
@@ -1375,6 +1442,39 @@ function TaskEditForm({
         </div>
       </div>
 
+      {dependencyTasks.length > 0 && (
+        <div>
+          <p className="mb-2 text-xs font-semibold text-[#777d88]">
+            Dependencies
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {dependencyTasks.map((dependency) => {
+              const selected = selectedDependencies.includes(dependency.key);
+
+              return (
+                <button
+                  type="button"
+                  key={dependency.id}
+                  onClick={() => toggleDependency(dependency.key)}
+                  className={cn(
+                    'inline-flex h-8 max-w-full items-center gap-2 rounded-[6px] border px-2.5 text-xs font-semibold transition-colors',
+                    selected
+                      ? 'border-[#31553a] bg-[#172219] text-[#78d16d]'
+                      : 'border-[#2a2c31] bg-[#202227] text-[#9ca1ad] hover:border-[#3a3d46]'
+                  )}
+                >
+                  <GitBranchIcon className="size-3.5" weight="bold" />
+                  <span className="font-ibm-plex-mono">{dependency.key}</span>
+                  <span className="max-w-[150px] truncate">
+                    {dependency.title}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-end gap-2">
         <button
           type="button"
@@ -1399,15 +1499,24 @@ function TaskDetailPanel({
   contextFiles,
   onDeleteTask,
   onUpdateTask,
+  projectTasks,
   task,
 }: {
   contextFiles: Project['contextFiles'];
   onDeleteTask: (taskId: string) => boolean;
   onUpdateTask: (taskId: string, input: KavbanUpdateTaskInput) => boolean;
+  projectTasks: Task[];
   task: Task;
 }) {
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const dependencyItems = task.dependencies.map((dependency) => ({
+    key: dependency,
+    task: projectTasks.find(
+      (projectTask) =>
+        projectTask.id === dependency || projectTask.key === dependency
+    ),
+  }));
 
   useEffect(() => {
     setIsConfirmingDelete(false);
@@ -1432,6 +1541,7 @@ function TaskDetailPanel({
         </div>
         <TaskEditForm
           contextFiles={contextFiles}
+          dependencyTasks={projectTasks.filter((item) => item.id !== task.id)}
           onCancel={() => setIsEditing(false)}
           onSave={(input) => onUpdateTask(task.id, input)}
           task={task}
@@ -1517,6 +1627,33 @@ function TaskDetailPanel({
             ))}
           </div>
         </div>
+
+        {dependencyItems.length > 0 && (
+          <div>
+            <h3 className="mb-2 text-sm font-semibold text-[#dce0e8]">
+              Dependencies
+            </h3>
+            <div className="space-y-2">
+              {dependencyItems.map((item) => (
+                <div
+                  key={item.key}
+                  className="flex items-center gap-2 rounded-[6px] border border-[#24262b] bg-[#17181b] px-3 py-2 text-sm text-[#aeb3bd]"
+                >
+                  <GitBranchIcon
+                    className="size-4 text-[#58b957]"
+                    weight="bold"
+                  />
+                  <span className="font-ibm-plex-mono text-xs">
+                    {item.task?.key ?? item.key}
+                  </span>
+                  {item.task && (
+                    <span className="min-w-0 truncate">{item.task.title}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div>
           <h3 className="mb-2 text-sm font-semibold text-[#dce0e8]">
@@ -1639,6 +1776,7 @@ function WorkspaceTasks({
           <TaskCreatePanel
             contextFiles={contextFiles}
             defaultStatus={taskCreateStatus}
+            dependencyTasks={tasks}
             onCancel={() => setIsCreatingTask(false)}
             onCreate={handleCreateTask}
           />
@@ -1683,6 +1821,7 @@ function WorkspaceTasks({
           contextFiles={contextFiles}
           onDeleteTask={handleDeleteTask}
           onUpdateTask={onUpdateTask}
+          projectTasks={tasks}
           task={selectedTask}
         />
       )}

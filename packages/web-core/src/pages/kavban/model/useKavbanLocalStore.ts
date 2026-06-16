@@ -24,6 +24,7 @@ export type KavbanCreateTaskInput = {
   agentId: KavbanAgentId;
   reviewerId: KavbanAgentId;
   tagLabels: string[];
+  dependencies: string[];
   contextFiles: string[];
 };
 
@@ -135,7 +136,7 @@ function createTaskFromInput(
       label,
       color: tagColors[index % tagColors.length],
     })),
-    dependencies: [],
+    dependencies: input.dependencies,
     contextFiles: getTaskContextFiles(project, input),
     events: [
       {
@@ -214,6 +215,7 @@ export function useKavbanLocalStore() {
         title: trimmedTitle,
         description: input.description.trim(),
         tagLabels: input.tagLabels.map((label) => label.trim()).filter(Boolean),
+        dependencies: input.dependencies.filter(Boolean),
         contextFiles: input.contextFiles.filter(Boolean),
       });
 
@@ -254,6 +256,7 @@ export function useKavbanLocalStore() {
         title: trimmedTitle,
         description: input.description.trim(),
         tagLabels,
+        dependencies: input.dependencies.filter(Boolean),
         contextFiles: input.contextFiles.filter(Boolean),
       };
       const updatedAt = nowIso();
@@ -278,6 +281,7 @@ export function useKavbanLocalStore() {
                         priority: normalizedInput.priority,
                         agentId: normalizedInput.agentId,
                         reviewerId: normalizedInput.reviewerId,
+                        dependencies: normalizedInput.dependencies,
                         tags: (normalizedInput.tagLabels.length > 0
                           ? normalizedInput.tagLabels
                           : ['Manual task']

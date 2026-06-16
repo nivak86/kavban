@@ -2823,10 +2823,24 @@ function WorkspaceTasks({
 }) {
   const [isCreatingTask, setIsCreatingTask] = useState(false);
   const [isImportingTask, setIsImportingTask] = useState(false);
+  const [queueSummary, setQueueSummary] = useState('');
   const [taskCreateStatus, setTaskCreateStatus] =
     useState<TaskStatus>('backlog');
   const selectedTask =
     tasks.find((task) => task.id === selectedTaskId) ?? tasks[0];
+  const readyTasks = useMemo(
+    () => tasks.filter((task) => task.status === 'ready'),
+    [tasks]
+  );
+  const runnableReadyTasks = useMemo(
+    () =>
+      readyTasks.filter(
+        (task) =>
+          !task.lockedBy && getBlockingDependencies(task, tasks).length === 0
+      ),
+    [readyTasks, tasks]
+  );
+  const waitingReadyTaskCount = readyTasks.length - runnableReadyTasks.length;
 
   const openCreateTask = (status: TaskStatus = 'backlog') => {
     setTaskCreateStatus(status);
@@ -2872,6 +2886,35 @@ function WorkspaceTasks({
     return deleted;
   };
 
+  const startReadyQueue = () => {
+    setIsCreatingTask(false);
+    setIsImportingTask(false);
+
+    if (runnableReadyTasks.length === 0) {
+      setQueueSummary(
+        waitingReadyTaskCount > 0
+          ? `${waitingReadyTaskCount} ready task${waitingReadyTaskCount === 1 ? '' : 's'} waiting on dependencies or locks.`
+          : 'No ready tasks available.'
+      );
+      return;
+    }
+
+    const startedTasks = runnableReadyTasks
+      .map((task) => ({
+        runId: onStartAgentRun(task.id),
+        task,
+      }))
+      .filter((item) => item.runId);
+
+    if (startedTasks.length > 0) {
+      onSelectTask(startedTasks[0].task.id);
+    }
+
+    setQueueSummary(
+      `Started ${startedTasks.length} ready task${startedTasks.length === 1 ? '' : 's'}${waitingReadyTaskCount > 0 ? `; ${waitingReadyTaskCount} waiting.` : '.'}`
+    );
+  };
+
   return (
     <div className="flex h-full min-h-0">
       <main className="min-w-0 flex-1 overflow-auto bg-[#101113]">
@@ -2908,6 +2951,11 @@ function WorkspaceTasks({
               <IconButton label="Filter tasks" icon={FunnelSimpleIcon} />
               <IconButton label="Task display" icon={SlidersHorizontalIcon} />
               <IconButton
+                label="Start ready queue"
+                icon={RocketIcon}
+                onClick={startReadyQueue}
+              />
+              <IconButton
                 label="Import Codex task"
                 icon={BracketsCurlyIcon}
                 onClick={openImportTask}
@@ -2920,6 +2968,22 @@ function WorkspaceTasks({
             </>
           }
         />
+        {queueSummary && (
+          <div className="flex items-center justify-between gap-3 border-b border-[#24262b] bg-[#111214] px-6 py-3 text-sm text-[#cfd2da]">
+            <div className="flex min-w-0 items-center gap-2">
+              <RocketIcon className="size-4 shrink-0 text-[#78d16d]" weight="bold" />
+              <span className="truncate">{queueSummary}</span>
+            </div>
+            <button
+              type="button"
+              aria-label="Dismiss queue summary"
+              onClick={() => setQueueSummary('')}
+              className="flex size-7 shrink-0 items-center justify-center rounded-[6px] text-[#777d88] transition-colors hover:bg-[#202227] hover:text-[#cfd2da]"
+            >
+              <XIcon className="size-4" weight="bold" />
+            </button>
+          </div>
+        )}
         {isCreatingTask && (
           <TaskCreatePanel
             contextFiles={contextFiles}

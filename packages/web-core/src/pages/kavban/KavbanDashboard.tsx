@@ -394,11 +394,19 @@ function ReviewReportCard({
 }
 
 type AgentRunPane = 'log' | 'prompt' | 'checks';
+type TaskDetailTab = 'overview' | 'run' | 'review' | 'chat' | 'history';
 
 const agentRunPaneOptions: { id: AgentRunPane; label: string }[] = [
   { id: 'log', label: 'Log' },
   { id: 'prompt', label: 'Prompt' },
   { id: 'checks', label: 'Checks' },
+];
+const taskDetailTabOptions: { id: TaskDetailTab; label: string }[] = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'run', label: 'Agent run' },
+  { id: 'review', label: 'Review' },
+  { id: 'chat', label: 'Chat' },
+  { id: 'history', label: 'History' },
 ];
 
 function AgentRunCard({
@@ -2217,6 +2225,8 @@ function TaskDetailPanel({
   task: Task;
 }) {
   const [commentText, setCommentText] = useState('');
+  const [activeDetailTab, setActiveDetailTab] =
+    useState<TaskDetailTab>('overview');
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const dependencyItems = getDependencyItems(task, projectTasks);
@@ -2282,6 +2292,7 @@ function TaskDetailPanel({
 
   useEffect(() => {
     setCommentText('');
+    setActiveDetailTab('overview');
     setIsConfirmingDelete(false);
     setIsEditing(false);
   }, [task.id]);
@@ -2598,6 +2609,26 @@ function TaskDetailPanel({
           </div>
         )}
 
+        <div className="flex overflow-x-auto rounded-[7px] bg-[#191b1f] p-1">
+          {taskDetailTabOptions.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveDetailTab(tab.id)}
+              className={cn(
+                'h-8 shrink-0 rounded-[6px] px-3 text-xs font-semibold transition-colors',
+                activeDetailTab === tab.id
+                  ? 'bg-[#25272d] text-[#dce0e8]'
+                  : 'text-[#777d88] hover:text-[#cfd2dc]'
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {activeDetailTab === 'overview' && (
+          <>
         <div className="grid gap-3 text-sm">
           {[
             ['Status', task.state],
@@ -2759,8 +2790,11 @@ function TaskDetailPanel({
             </div>
           </div>
         )}
+          </>
+        )}
 
-        <div>
+        {activeDetailTab === 'run' && (
+          <div>
           <h3 className="mb-2 text-sm font-semibold text-[#dce0e8]">
             Agent runs
           </h3>
@@ -2783,8 +2817,10 @@ function TaskDetailPanel({
             </div>
           )}
         </div>
+        )}
 
-        <div>
+        {activeDetailTab === 'review' && (
+          <div>
           <h3 className="mb-2 text-sm font-semibold text-[#dce0e8]">
             AI review
           </h3>
@@ -2801,8 +2837,10 @@ function TaskDetailPanel({
             </div>
           )}
         </div>
+        )}
 
-        <div>
+        {activeDetailTab === 'chat' && (
+          <div>
           <h3 className="mb-2 text-sm font-semibold text-[#dce0e8]">Chat</h3>
           <form
             className="mb-3 space-y-2"
@@ -2865,8 +2903,10 @@ function TaskDetailPanel({
             </div>
           )}
         </div>
+        )}
 
-        <div>
+        {activeDetailTab === 'history' && (
+          <div>
           <h3 className="mb-2 text-sm font-semibold text-[#dce0e8]">
             Activity
           </h3>
@@ -2879,6 +2919,7 @@ function TaskDetailPanel({
             ))}
           </div>
         </div>
+        )}
       </div>
     </aside>
   );

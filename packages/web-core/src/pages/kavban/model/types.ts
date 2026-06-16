@@ -3,7 +3,10 @@ export type KavbanTaskStatus =
   | 'ready'
   | 'progress'
   | 'ai-review'
+  | 'fix-required'
   | 'human-review'
+  | 'approved'
+  | 'pr-created'
   | 'done';
 
 export type KavbanTaskPriority = 'High' | 'Medium' | 'Low';
@@ -17,7 +20,9 @@ export type KavbanWorkflowIconKey =
   | 'lightning'
   | 'circle'
   | 'magic-wand'
+  | 'x'
   | 'shield-check'
+  | 'git-pull-request'
   | 'check-circle';
 
 export type KavbanInboxKind = 'codex' | 'claude' | 'approval' | 'github';

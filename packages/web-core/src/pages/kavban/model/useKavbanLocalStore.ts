@@ -106,7 +106,10 @@ const taskStateByStatus: Record<KavbanTaskStatus, string> = {
   ready: 'Ready',
   progress: 'Working...',
   'ai-review': 'AI review',
+  'fix-required': 'Fix required',
   'human-review': 'Needs human',
+  approved: 'Approved',
+  'pr-created': 'PR created',
   done: 'Done',
 };
 
@@ -1365,14 +1368,16 @@ export function useKavbanLocalStore() {
       const reviewStatus: KavbanReviewStatus =
         taskToReview.requiresHumanReview === false ? 'passed' : 'needs-human';
       const nextStatus: KavbanTaskStatus =
-        taskToReview.requiresHumanReview === false ? 'done' : 'human-review';
+        taskToReview.requiresHumanReview === false
+          ? 'approved'
+          : 'human-review';
       const reviewer = kavbanAgents[taskToReview.reviewerId];
       const report = {
         id: reportId,
         reviewerId: taskToReview.reviewerId,
         status: reviewStatus,
         summary: `${reviewer.name} reviewed ${taskToReview.key}; tests passed and the branch is ready for ${
-          nextStatus === 'done' ? 'completion' : 'human review'
+          nextStatus === 'approved' ? 'PR creation' : 'human review'
         }.`,
         risk:
           taskToReview.priority === 'High'
@@ -1399,6 +1404,10 @@ export function useKavbanLocalStore() {
                         ...task,
                         status: nextStatus,
                         state: taskStateByStatus[nextStatus],
+                        approvalStatus:
+                          nextStatus === 'approved'
+                            ? 'approved'
+                            : task.approvalStatus,
                         reviewStatus,
                         reviewReports: [report, ...(task.reviewReports ?? [])],
                         events: [
@@ -1445,8 +1454,8 @@ export function useKavbanLocalStore() {
       const updatedAt = nowIso();
       const approved = input.status === 'approved';
       const nextStatus: KavbanTaskStatus = approved
-        ? 'human-review'
-        : 'progress';
+        ? 'approved'
+        : 'fix-required';
       const note =
         input.note?.trim() ||
         (approved
@@ -1467,9 +1476,7 @@ export function useKavbanLocalStore() {
                     ? {
                         ...task,
                         status: nextStatus,
-                        state: approved
-                          ? 'Approved'
-                          : taskStateByStatus[nextStatus],
+                        state: taskStateByStatus[nextStatus],
                         approvalStatus: input.status,
                         reviewStatus: approved ? 'passed' : 'changes-requested',
                         events: [
@@ -1619,7 +1626,7 @@ export function useKavbanLocalStore() {
     (taskId: string) => {
       const taskToOpen = activeProject.tasks.find((task) => task.id === taskId);
 
-      if (!taskToOpen) {
+      if (!taskToOpen || taskToOpen.approvalStatus !== 'approved') {
         return null;
       }
 
@@ -1638,6 +1645,8 @@ export function useKavbanLocalStore() {
                   task.id === taskId
                     ? {
                         ...task,
+                        status: 'pr-created',
+                        state: taskStateByStatus['pr-created'],
                         branch,
                         pr,
                         events: [

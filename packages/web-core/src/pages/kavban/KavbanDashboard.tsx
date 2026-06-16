@@ -89,7 +89,9 @@ const workflowIconByKey: Record<KavbanWorkflowIconKey, PhosphorIcon> = {
   lightning: LightningIcon,
   circle: CircleIcon,
   'magic-wand': MagicWandIcon,
+  x: XIcon,
   'shield-check': ShieldCheckIcon,
+  'git-pull-request': GitPullRequestIcon,
   'check-circle': CheckCircleIcon,
 };
 
@@ -117,6 +119,7 @@ const taskAdvanceActions: Partial<
   ready: { label: 'Start agent', status: 'progress' },
   progress: { label: 'Send to AI review', status: 'ai-review' },
   'ai-review': { label: 'Request human review', status: 'human-review' },
+  'fix-required': { label: 'Request agent fix', status: 'progress' },
 };
 const taskFormFieldClass =
   'w-full rounded-[6px] border border-[#2a2c31] bg-[#111214] px-3 text-sm text-[#dce0e8] outline-none transition-colors placeholder:text-[#626874] focus:border-[#444956]';
@@ -327,7 +330,9 @@ function StatusIcon({ task }: { task: Task }) {
     <Icon
       className="size-4 shrink-0"
       style={{ color: column?.color ?? '#7b818d' }}
-      weight={task.status === 'done' ? 'fill' : 'bold'}
+      weight={
+        task.status === 'done' || task.status === 'approved' ? 'fill' : 'bold'
+      }
     />
   );
 }
@@ -1152,15 +1157,17 @@ function WorkspaceHome({
     },
     {
       label: 'In review',
-      value: String(countTasks(['ai-review', 'human-review'])),
+      value: String(
+        countTasks(['ai-review', 'fix-required', 'human-review'])
+      ),
       icon: MagicWandIcon,
       color: '#6aa7ff',
     },
     {
-      label: 'Human gates',
-      value: String(countTasks(['human-review'])),
-      icon: ShieldCheckIcon,
-      color: '#f26d6d',
+      label: 'PR pipeline',
+      value: String(countTasks(['approved', 'pr-created'])),
+      icon: GitPullRequestIcon,
+      color: '#58b957',
     },
   ];
 
@@ -2496,8 +2503,14 @@ function TaskDetailPanel({
     task.status !== 'ready';
   const isRollbackMerge = Boolean(task.rollbackPr && !task.rolledBackAt);
   const activeMergePullRequest = isRollbackMerge ? task.rollbackPr : task.pr;
+  const canOpenTaskPullRequest =
+    !task.pr &&
+    task.status === 'approved' &&
+    task.approvalStatus === 'approved';
   const canMergeTask =
-    task.status !== 'done' && task.approvalStatus === 'approved';
+    task.status !== 'done' &&
+    task.approvalStatus === 'approved' &&
+    Boolean(activeMergePullRequest);
   const canOpenRollback =
     task.status === 'done' && Boolean(task.mergedAt) && !task.rollbackPr;
   const needsFreshAiReview =
@@ -2730,7 +2743,7 @@ function TaskDetailPanel({
           </button>
         )}
 
-        {!task.pr && (
+        {canOpenTaskPullRequest && (
           <button
             type="button"
             onClick={() => onOpenTaskPullRequest(task.id)}
@@ -2744,21 +2757,11 @@ function TaskDetailPanel({
         {canMergeTask && (
           <button
             type="button"
-            disabled={!activeMergePullRequest}
             onClick={() => onMergeTask(task.id)}
-            className={cn(
-              'flex h-9 w-full items-center justify-center gap-2 rounded-[6px] border px-3 text-xs font-semibold transition-colors',
-              activeMergePullRequest
-                ? 'border-[#31553a] bg-[#172219] text-[#78d16d] hover:border-[#427049]'
-                : 'cursor-not-allowed border-[#553131] bg-[#211719] text-[#f26d6d]'
-            )}
+            className="flex h-9 w-full items-center justify-center gap-2 rounded-[6px] border border-[#31553a] bg-[#172219] px-3 text-xs font-semibold text-[#78d16d] transition-colors hover:border-[#427049]"
           >
             <GitPullRequestIcon className="size-4" weight="bold" />
-            {activeMergePullRequest
-              ? isRollbackMerge
-                ? 'Merge rollback PR'
-                : 'Merge PR'
-              : 'Open PR before merge'}
+            {isRollbackMerge ? 'Merge rollback PR' : 'Merge PR'}
           </button>
         )}
 
@@ -3316,7 +3319,7 @@ function TaskDetailPanel({
                 <GithubLogoIcon className="size-4" weight="bold" />
                 Open pull request
               </a>
-            ) : (
+            ) : canOpenTaskPullRequest ? (
               <button
                 type="button"
                 onClick={() => onOpenTaskPullRequest(task.id)}
@@ -3325,6 +3328,11 @@ function TaskDetailPanel({
                 <GitPullRequestIcon className="size-4" weight="bold" />
                 Open draft PR
               </button>
+            ) : (
+              <div className="flex min-h-9 items-center gap-2 rounded-[6px] border border-[#24262b] bg-[#17181b] px-3 text-xs font-medium text-[#777d88]">
+                <ShieldCheckIcon className="size-4" weight="bold" />
+                Approval required before PR creation
+              </div>
             )}
           </div>
         )}

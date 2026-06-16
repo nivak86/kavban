@@ -69,10 +69,28 @@ export const kavbanWorkflowColumns: KavbanWorkflowColumn[] = [
     color: '#6aa7ff',
   },
   {
+    id: 'fix-required',
+    label: 'Fix Required',
+    iconKey: 'x',
+    color: '#f26d6d',
+  },
+  {
     id: 'human-review',
     label: 'Human Review',
     iconKey: 'shield-check',
     color: '#f26d6d',
+  },
+  {
+    id: 'approved',
+    label: 'Approved',
+    iconKey: 'shield-check',
+    color: '#78d16d',
+  },
+  {
+    id: 'pr-created',
+    label: 'PR Created',
+    iconKey: 'git-pull-request',
+    color: '#58b957',
   },
   {
     id: 'done',
@@ -252,8 +270,8 @@ const projectTasks: KavbanTask[] = [
     title: 'Review diff before human approval',
     description:
       'Use an independent reviewer agent to inspect the diff, tests, security risk, and task compliance.',
-    status: 'ai-review',
-    state: 'AI review',
+    status: 'fix-required',
+    state: 'Fix required',
     priority: 'Medium',
     agentId: 'claude',
     reviewerId: 'codex',
@@ -352,13 +370,14 @@ const projectTasks: KavbanTask[] = [
     title: 'Create PR event log',
     description:
       'Record branch, commit, PR, reviewer output, and approval decisions against the task history.',
-    status: 'done',
+    status: 'pr-created',
     state: 'PR created',
     priority: 'Low',
     agentId: 'codex',
     reviewerId: 'reviewer',
     branch: 'kav/kav-000126-event-log',
     pr: '#55449',
+    approvalStatus: 'approved',
     tags: [
       { label: 'Events', color: '#6aa7ff' },
       { label: 'Git', color: '#78d16d' },

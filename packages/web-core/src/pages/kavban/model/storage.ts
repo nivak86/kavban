@@ -1,4 +1,9 @@
-import { kavbanInboxItems, kavbanProfile, kavbanProject } from './seed';
+import {
+  kavbanInboxItems,
+  kavbanProfile,
+  kavbanProject,
+  kavbanWorkflowColumns,
+} from './seed';
 import { normalizeKavbanNotificationSettings } from './notifications';
 import type { KavbanInboxItem, KavbanProfile, KavbanProject } from './types';
 
@@ -48,6 +53,39 @@ function normalizeKavbanProfile(profile: KavbanProfile): KavbanProfile {
     ...kavbanProfile,
     ...profile,
     notifications: normalizeKavbanNotificationSettings(profile.notifications),
+  };
+}
+
+function normalizeKavbanProject(project: KavbanProject): KavbanProject {
+  return {
+    ...project,
+    workflowColumns: structuredClone(kavbanWorkflowColumns),
+    tasks: project.tasks.map((task) => {
+      if (
+        task.status === 'ai-review' &&
+        task.reviewStatus === 'changes-requested'
+      ) {
+        return {
+          ...task,
+          status: 'fix-required',
+          state: 'Fix required',
+        };
+      }
+
+      if (
+        task.status === 'done' &&
+        task.state === 'PR created' &&
+        !task.mergedAt
+      ) {
+        return {
+          ...task,
+          status: 'pr-created',
+          state: 'PR created',
+        };
+      }
+
+      return task;
+    }),
   };
 }
 
@@ -119,6 +157,7 @@ export function migrateKavbanLocalState(value: unknown): KavbanLocalState {
     return {
       ...value,
       profile: normalizeKavbanProfile(value.profile),
+      projects: value.projects.map(normalizeKavbanProject),
     };
   }
 
@@ -128,7 +167,7 @@ export function migrateKavbanLocalState(value: unknown): KavbanLocalState {
       activeProjectId: value.project.id,
       inboxItems: value.inboxItems,
       profile: normalizeKavbanProfile(value.profile),
-      projects: [value.project],
+      projects: [normalizeKavbanProject(value.project)],
       updatedAt: nowIso(),
     };
   }

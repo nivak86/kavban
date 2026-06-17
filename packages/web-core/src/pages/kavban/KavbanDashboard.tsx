@@ -6972,6 +6972,9 @@ function WorkspaceSettings({
   const [newContextPurpose, setNewContextPurpose] = useState('');
   const [newContextInjected, setNewContextInjected] = useState(true);
   const [isConfirmingReset, setIsConfirmingReset] = useState(false);
+  const [projectContextCopyStatus, setProjectContextCopyStatus] = useState<
+    'idle' | 'copied' | 'selected' | 'failed'
+  >('idle');
   const [safetyPolicyCopyStatus, setSafetyPolicyCopyStatus] = useState<
     'idle' | 'copied' | 'selected' | 'failed'
   >('idle');
@@ -6981,6 +6984,7 @@ function WorkspaceSettings({
   const [draftContextPath, setDraftContextPath] = useState('');
   const [draftContextPurpose, setDraftContextPurpose] = useState('');
   const [draftContextInjected, setDraftContextInjected] = useState(true);
+  const projectContextRef = useRef<HTMLPreElement>(null);
   const safetyPolicyRef = useRef<HTMLPreElement>(null);
   const requiredContextFilePaths = kavbanDefaultContextFiles.map(
     (file) => file.path
@@ -7026,17 +7030,72 @@ function WorkspaceSettings({
   }, [contextFiles, editingContextPath]);
 
   useEffect(() => {
-    if (safetyPolicyCopyStatus === 'idle') {
+    if (
+      projectContextCopyStatus === 'idle' &&
+      safetyPolicyCopyStatus === 'idle'
+    ) {
       return;
     }
 
     const timeout = window.setTimeout(() => {
+      setProjectContextCopyStatus('idle');
       setSafetyPolicyCopyStatus('idle');
     }, 1800);
 
     return () => window.clearTimeout(timeout);
-  }, [safetyPolicyCopyStatus]);
+  }, [projectContextCopyStatus, safetyPolicyCopyStatus]);
 
+  const projectContextPackText = useMemo(
+    () =>
+      [
+        '# KAVBAN project context',
+        '',
+        'Brief:',
+        brief.trim() || 'No project brief set.',
+        '',
+        'Repository:',
+        `- Provider: ${repository.provider}`,
+        `- Owner: ${repository.owner}`,
+        `- Name: ${repository.name}`,
+        `- Default branch: ${repository.defaultBranch}`,
+        `- Local path: ${repository.localPath || 'Not set'}`,
+        '',
+        'Agent routing:',
+        `- Default worker: ${kavbanAgents[agentRouting.defaultAgentId].name}`,
+        `- UI/product: ${kavbanAgents[agentRouting.uiAgentId].name}`,
+        `- Code/tests: ${kavbanAgents[agentRouting.codeAgentId].name}`,
+        `- Reviewer: ${kavbanAgents[agentRouting.reviewerAgentId].name}`,
+        `- Human review: ${agentRouting.humanReviewRequired ? 'Required' : 'Optional'}`,
+        '',
+        'Connectors:',
+        ...kavbanConnectorOrder.map((connectorId) => {
+          const connector = connectors[connectorId];
+
+          return `- ${connector.name}: ${connector.connected ? 'Connected' : 'Disconnected'} (${connector.status})`;
+        }),
+        '',
+        'Context files:',
+        ...contextFiles.map(
+          (file) =>
+            `- ${file.injected ? '[x]' : '[ ]'} ${file.path}: ${file.purpose}`
+        ),
+        '',
+        'Operating rules:',
+        '- Create task branches before code changes.',
+        '- Attach injected context files before agent runs.',
+        '- Require independent AI review before merge decisions.',
+        '- Use human approval for sensitive or production-bound work.',
+      ].join('\n'),
+    [agentRouting, brief, connectors, contextFiles, repository]
+  );
+  const projectContextCopyLabel =
+    projectContextCopyStatus === 'copied'
+      ? 'Copied'
+      : projectContextCopyStatus === 'selected'
+        ? 'Selected'
+        : projectContextCopyStatus === 'failed'
+          ? 'Copy failed'
+          : 'Copy context';
   const safetyPolicyText = useMemo(
     () =>
       [
@@ -7198,6 +7257,25 @@ function WorkspaceSettings({
     setEditingContextPath(null);
   };
 
+  const copyProjectContextPack = async () => {
+    const copied = await copyTextToClipboard(projectContextPackText);
+
+    if (copied) {
+      setProjectContextCopyStatus('copied');
+      return;
+    }
+
+    const projectContextElement = projectContextRef.current;
+
+    if (!projectContextElement) {
+      setProjectContextCopyStatus('failed');
+      return;
+    }
+
+    selectElementContents(projectContextElement);
+    setProjectContextCopyStatus('selected');
+  };
+
   const copySafetyPolicy = async () => {
     const copied = await copyTextToClipboard(safetyPolicyText);
 
@@ -7221,11 +7299,30 @@ function WorkspaceSettings({
     <div className="h-full overflow-y-auto bg-[#101113] px-6 py-7">
       <div className="mx-auto max-w-5xl space-y-5">
         <section className="rounded-[8px] border border-[#24262b] bg-[#17181b] p-5">
-          <div className="mb-4 flex items-center gap-3">
-            <FileTextIcon className="size-5 text-[#858b96]" weight="bold" />
-            <h2 className="text-lg font-semibold text-[#dce0e8]">
-              Project brief
-            </h2>
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <FileTextIcon className="size-5 text-[#858b96]" weight="bold" />
+              <h2 className="text-lg font-semibold text-[#dce0e8]">
+                Project brief
+              </h2>
+            </div>
+            <button
+              type="button"
+              onClick={copyProjectContextPack}
+              className={cn(
+                'inline-flex h-8 items-center justify-center gap-2 rounded-[6px] border px-3 text-xs font-semibold transition-colors',
+                projectContextCopyStatus === 'copied'
+                  ? 'border-[#31553a] bg-[#172219] text-[#78d16d]'
+                  : projectContextCopyStatus === 'selected'
+                    ? 'border-[#5b4a22] bg-[#241f15] text-[#f2d14b]'
+                    : projectContextCopyStatus === 'failed'
+                      ? 'border-[#553131] bg-[#211719] text-[#f26d6d]'
+                      : 'border-[#2a2c31] bg-[#202227] text-[#cfd2da] hover:border-[#3a3d46]'
+              )}
+            >
+              <CopyIcon className="size-3.5" weight="bold" />
+              {projectContextCopyLabel}
+            </button>
           </div>
           <label className="sr-only" htmlFor="project-brief">
             Project brief
@@ -7236,6 +7333,23 @@ function WorkspaceSettings({
             onChange={(event) => onBriefChange(event.target.value)}
             className="min-h-[160px] w-full resize-y rounded-[7px] border border-[#2a2c31] bg-[#111214] p-4 text-sm leading-6 text-[#dce0e8] outline-none transition-colors placeholder:text-[#626874] focus:border-[#444956]"
           />
+          <div className="mt-4 rounded-[7px] border border-[#24262b] bg-[#111214] p-3">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <p className="text-sm font-semibold text-[#dce0e8]">
+                Agent context export
+              </p>
+              <span className="rounded-full border border-[#2a2c31] px-2 py-0.5 text-[11px] font-semibold text-[#858b96]">
+                {contextFiles.filter((file) => file.injected).length}/
+                {contextFiles.length} injected
+              </span>
+            </div>
+            <pre
+              ref={projectContextRef}
+              className="max-h-52 overflow-auto whitespace-pre-wrap break-words rounded-[6px] border border-[#24262b] bg-[#0f1012] p-3 font-ibm-plex-mono text-[11px] leading-5 text-[#858b96]"
+            >
+              {projectContextPackText}
+            </pre>
+          </div>
         </section>
 
         <section className="rounded-[8px] border border-[#24262b] bg-[#17181b] p-5">

@@ -6575,6 +6575,39 @@ function WorkspaceSettings({
               );
             })}
           </div>
+
+          <div className="mt-4 grid gap-3 border-t border-[#24262b] pt-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+            <label className="block">
+              <span className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#777d88]">
+                <ShieldCheckIcon className="size-3.5" weight="bold" />
+                Reviewer agent
+              </span>
+              <select
+                value={draftAgentRouting.reviewerAgentId}
+                onChange={(event) =>
+                  updateDraftAgentRouting(
+                    'reviewerAgentId',
+                    event.target.value as KavbanAgentId
+                  )
+                }
+                className={cn(taskFormFieldClass, 'h-9')}
+              >
+                {reviewerOptions.map((agentId) => (
+                  <option key={agentId} value={agentId}>
+                    {kavbanAgents[agentId].name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={saveAgentRouting}
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-[6px] border border-[#31553a] px-3 text-xs font-semibold text-[#78d16d] transition-colors hover:bg-[#172219]"
+            >
+              <CheckCircleIcon className="size-4" weight="bold" />
+              Save review rules
+            </button>
+          </div>
         </section>
 
         <section className="rounded-[8px] border border-[#24262b] bg-[#17181b] p-5">
@@ -6612,6 +6645,31 @@ function WorkspaceSettings({
                 <p className="text-sm leading-6 text-[#cfd2da]">{rule}</p>
               </div>
             ))}
+          </div>
+
+          <div className="mt-4 flex flex-col gap-3 border-t border-[#24262b] pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <label className="flex items-center gap-3 text-sm font-semibold text-[#cfd2da]">
+              <input
+                type="checkbox"
+                checked={draftAgentRouting.humanReviewRequired}
+                onChange={(event) =>
+                  updateDraftAgentRouting(
+                    'humanReviewRequired',
+                    event.target.checked
+                  )
+                }
+                className="size-4 accent-[#6aa7ff]"
+              />
+              Require human approval before merge
+            </label>
+            <button
+              type="button"
+              onClick={saveAgentRouting}
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-[6px] border border-[#31553a] px-3 text-xs font-semibold text-[#78d16d] transition-colors hover:bg-[#172219]"
+            >
+              <CheckCircleIcon className="size-4" weight="bold" />
+              Save merge rules
+            </button>
           </div>
         </section>
 

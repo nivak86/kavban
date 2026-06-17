@@ -278,6 +278,69 @@ const taskAdvanceActions: Partial<
 };
 const taskFormFieldClass =
   'w-full rounded-[6px] border border-[#2a2c31] bg-[#111214] px-3 text-sm text-[#dce0e8] outline-none transition-colors placeholder:text-[#626874] focus:border-[#444956]';
+const kavbanBlockedOperations: Array<{
+  body: string;
+  gate: string;
+  icon: PhosphorIcon;
+  label: string;
+}> = [
+  {
+    label: 'Direct main push',
+    body: 'Agents must create task branches and open PRs before work can touch the default branch.',
+    gate: 'PR required',
+    icon: GitBranchIcon,
+  },
+  {
+    label: 'Force push',
+    body: 'History rewrites are blocked after a task branch is connected to a Kavban run.',
+    gate: 'No rewrite',
+    icon: LockKeyIcon,
+  },
+  {
+    label: 'Self approval',
+    body: 'The worker agent cannot approve its own code review or merge request.',
+    gate: 'Independent review',
+    icon: ShieldCheckIcon,
+  },
+  {
+    label: 'Secrets edits',
+    body: 'Changes touching env files, tokens, or credential paths require a human gate before merge.',
+    gate: 'Human gate',
+    icon: LockKeyIcon,
+  },
+  {
+    label: 'Production deploy',
+    body: 'Deploy commands stay unavailable from agent runs until the PR is merged and approved by a human.',
+    gate: 'Manual release',
+    icon: RocketIcon,
+  },
+];
+const kavbanAllowedOperations: Array<{
+  body: string;
+  icon: PhosphorIcon;
+  label: string;
+}> = [
+  {
+    label: 'Create task branch',
+    body: 'Codex and Claude can work inside task-scoped branches with the project context pack attached.',
+    icon: GitBranchIcon,
+  },
+  {
+    label: 'Open draft PR',
+    body: 'Agents can prepare a draft PR once checks, review notes, and file changes are recorded.',
+    icon: GitPullRequestIcon,
+  },
+  {
+    label: 'Request human approval',
+    body: 'Sensitive work can move to Human Review, notify the Inbox, and wait for an explicit decision.',
+    icon: UserCircleIcon,
+  },
+  {
+    label: 'Open revert PR',
+    body: 'Merged work can be rolled back through a new PR with reviewer assignment and audit history.',
+    icon: ArrowSquareOutIcon,
+  },
+];
 const codexIntakeExample = JSON.stringify(
   {
     project: 'Kavban Core',
@@ -6681,12 +6744,16 @@ function WorkspaceSettings({
   const [newContextPurpose, setNewContextPurpose] = useState('');
   const [newContextInjected, setNewContextInjected] = useState(true);
   const [isConfirmingReset, setIsConfirmingReset] = useState(false);
+  const [safetyPolicyCopyStatus, setSafetyPolicyCopyStatus] = useState<
+    'idle' | 'copied' | 'selected' | 'failed'
+  >('idle');
   const [editingContextPath, setEditingContextPath] = useState<string | null>(
     null
   );
   const [draftContextPath, setDraftContextPath] = useState('');
   const [draftContextPurpose, setDraftContextPurpose] = useState('');
   const [draftContextInjected, setDraftContextInjected] = useState(true);
+  const safetyPolicyRef = useRef<HTMLPreElement>(null);
   const requiredContextFilePaths = kavbanDefaultContextFiles.map(
     (file) => file.path
   );
@@ -6729,6 +6796,53 @@ function WorkspaceSettings({
       setEditingContextPath(null);
     }
   }, [contextFiles, editingContextPath]);
+
+  useEffect(() => {
+    if (safetyPolicyCopyStatus === 'idle') {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setSafetyPolicyCopyStatus('idle');
+    }, 1800);
+
+    return () => window.clearTimeout(timeout);
+  }, [safetyPolicyCopyStatus]);
+
+  const safetyPolicyText = useMemo(
+    () =>
+      [
+        'KAVBAN safety policy',
+        `Repository: ${repository.owner}/${repository.name}`,
+        `Default branch: ${repository.defaultBranch}`,
+        '',
+        'Blocked operations:',
+        ...kavbanBlockedOperations.map(
+          (operation) =>
+            `- ${operation.label}: ${operation.body} Gate: ${operation.gate}.`
+        ),
+        '',
+        'Allowed operations:',
+        ...kavbanAllowedOperations.map(
+          (operation) => `- ${operation.label}: ${operation.body}`
+        ),
+        '',
+        'Merge requirements:',
+        '- Task branch and pull request are required before main can change.',
+        '- Tests, AI review, and independent reviewer status must be recorded.',
+        '- Human approval is required for sensitive or production-bound work.',
+        '- Rollback happens through a new revert PR, never by mutating history.',
+      ].join('\n'),
+    [repository.defaultBranch, repository.name, repository.owner]
+  );
+  const safetyPolicyCopyLabel =
+    safetyPolicyCopyStatus === 'copied'
+      ? 'Copied'
+      : safetyPolicyCopyStatus === 'selected'
+        ? 'Selected'
+        : safetyPolicyCopyStatus === 'failed'
+          ? 'Copy failed'
+          : 'Copy policy';
 
   const resetNewContextFile = () => {
     setNewContextPath('');
@@ -6854,6 +6968,25 @@ function WorkspaceSettings({
 
     setContextError('');
     setEditingContextPath(null);
+  };
+
+  const copySafetyPolicy = async () => {
+    const copied = await copyTextToClipboard(safetyPolicyText);
+
+    if (copied) {
+      setSafetyPolicyCopyStatus('copied');
+      return;
+    }
+
+    const safetyPolicyElement = safetyPolicyRef.current;
+
+    if (!safetyPolicyElement) {
+      setSafetyPolicyCopyStatus('failed');
+      return;
+    }
+
+    selectElementContents(safetyPolicyElement);
+    setSafetyPolicyCopyStatus('selected');
   };
 
   return (
@@ -7588,29 +7721,105 @@ function WorkspaceSettings({
             </span>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
-            {[
-              {
-                label: 'Project deletion',
-                body: 'Project removal stays unavailable until audit logging and confirmation gates are backed by the store.',
-              },
-              {
-                label: 'Main branch write access',
-                body: 'KAVBAN agents can open branches and PRs; they cannot push or merge directly to main.',
-              },
-            ].map((item) => (
-              <div
-                key={item.label}
-                className="rounded-[7px] border border-[#3b2a2d] bg-[#111214] p-3"
-              >
-                <p className="text-sm font-semibold text-[#f26d6d]">
-                  {item.label}
-                </p>
-                <p className="mt-2 text-sm leading-6 text-[#9ca1ad]">
-                  {item.body}
-                </p>
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(280px,0.75fr)]">
+            <div>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold text-[#dce0e8]">
+                  Blocked operations
+                </h3>
+                <span className="rounded-full border border-[#553131] px-2 py-0.5 text-[11px] font-semibold text-[#f26d6d]">
+                  Agent locked
+                </span>
               </div>
-            ))}
+              <div className="space-y-2">
+                {kavbanBlockedOperations.map((operation) => {
+                  const Icon = operation.icon;
+
+                  return (
+                    <div
+                      key={operation.label}
+                      className="grid gap-3 rounded-[7px] border border-[#3b2a2d] bg-[#111214] p-3 sm:grid-cols-[1fr_auto] sm:items-start"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <Icon
+                            className="size-4 shrink-0 text-[#f26d6d]"
+                            weight="bold"
+                          />
+                          <p className="truncate text-sm font-semibold text-[#f26d6d]">
+                            {operation.label}
+                          </p>
+                        </div>
+                        <p className="mt-2 text-sm leading-6 text-[#9ca1ad]">
+                          {operation.body}
+                        </p>
+                      </div>
+                      <span className="inline-flex h-7 items-center justify-center rounded-full border border-[#553131] px-2 text-[11px] font-semibold text-[#f26d6d]">
+                        {operation.gate}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-semibold text-[#dce0e8]">
+                    Allowed path
+                  </h3>
+                  <span className="rounded-full border border-[#31553a] px-2 py-0.5 text-[11px] font-semibold text-[#78d16d]">
+                    Audited
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {kavbanAllowedOperations.map((operation) => {
+                    const Icon = operation.icon;
+
+                    return (
+                      <div
+                        key={operation.label}
+                        className="rounded-[7px] border border-[#24262b] bg-[#111214] p-3"
+                      >
+                        <div className="mb-2 flex items-center gap-2">
+                          <Icon
+                            className="size-4 shrink-0 text-[#78d16d]"
+                            weight="bold"
+                          />
+                          <p className="text-sm font-semibold text-[#dce0e8]">
+                            {operation.label}
+                          </p>
+                        </div>
+                        <p className="text-xs leading-5 text-[#858b96]">
+                          {operation.body}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="rounded-[7px] border border-[#24262b] bg-[#111214] p-3">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-[#dce0e8]">
+                    Safety policy
+                  </p>
+                  <button
+                    type="button"
+                    onClick={copySafetyPolicy}
+                    className="inline-flex h-8 items-center justify-center gap-2 rounded-[6px] border border-[#2a2c31] px-3 text-xs font-semibold text-[#cfd2da] transition-colors hover:bg-[#202227]"
+                  >
+                    <CopyIcon className="size-3.5" weight="bold" />
+                    {safetyPolicyCopyLabel}
+                  </button>
+                </div>
+                <pre
+                  ref={safetyPolicyRef}
+                  className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-[6px] border border-[#24262b] bg-[#0f1012] p-3 font-ibm-plex-mono text-[11px] leading-5 text-[#858b96]"
+                >
+                  {safetyPolicyText}
+                </pre>
+              </div>
+            </div>
           </div>
           <div className="mt-3 rounded-[7px] border border-[#553131] bg-[#111214] p-3">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

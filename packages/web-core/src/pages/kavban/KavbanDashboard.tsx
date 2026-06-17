@@ -2950,7 +2950,112 @@ function WorkspaceHome({
   );
 }
 
+function getTaskFormReadinessItems({
+  agentId,
+  branch,
+  connectors,
+  contextFiles,
+  dependencyTasks,
+  requiresHumanReview,
+  reviewerId,
+  selectedContextFiles,
+  selectedDependencies,
+}: {
+  agentId: KavbanAgentId;
+  branch?: string;
+  connectors: Record<ConnectorId, Connector>;
+  contextFiles: Project['contextFiles'];
+  dependencyTasks: Task[];
+  requiresHumanReview: boolean;
+  reviewerId: KavbanAgentId;
+  selectedContextFiles: string[];
+  selectedDependencies: string[];
+}) {
+  const defaultContextFiles = contextFiles
+    .filter((file) => file.injected)
+    .map((file) => file.path);
+  const runContextFiles =
+    selectedContextFiles.length > 0 ? selectedContextFiles : defaultContextFiles;
+  const contextFilePathSet = new Set(contextFiles.map((file) => file.path));
+  const missingContextFiles =
+    runContextFiles.length === 0
+      ? ['Project context pack']
+      : runContextFiles.filter((path) => !contextFilePathSet.has(path));
+  const selectedDependencyItems = selectedDependencies.map((dependency) => ({
+    key: dependency,
+    task: dependencyTasks.find(
+      (task) => task.id === dependency || task.key === dependency
+    ),
+  }));
+  const blockingDependencies = selectedDependencyItems.filter(
+    (item) => !item.task || item.task.status !== 'done'
+  );
+  const runConnectorIds: ConnectorId[] = [
+    'github',
+    agentId === 'claude' ? 'claude' : 'codex',
+  ];
+  const missingConnectors = runConnectorIds
+    .map((connectorId) => connectors[connectorId])
+    .filter((connector) => !connector.connected);
+
+  return [
+    {
+      detail:
+        missingConnectors.length === 0
+          ? runConnectorIds
+              .map((connectorId) => connectors[connectorId].name)
+              .join(', ')
+          : `Setup ${missingConnectors.map((connector) => connector.name).join(', ')}`,
+      label: 'Run connectors',
+      ready: missingConnectors.length === 0,
+    },
+    {
+      detail:
+        missingContextFiles.length === 0
+          ? selectedContextFiles.length > 0
+            ? `${runContextFiles.length} selected file${runContextFiles.length === 1 ? '' : 's'}`
+            : `${runContextFiles.length} default file${runContextFiles.length === 1 ? '' : 's'}`
+          : `Missing ${missingContextFiles.join(', ')}`,
+      label: 'Context pack',
+      ready: missingContextFiles.length === 0,
+    },
+    {
+      detail:
+        blockingDependencies.length === 0
+          ? selectedDependencyItems.length > 0
+            ? `${selectedDependencyItems.length} dependenc${selectedDependencyItems.length === 1 ? 'y' : 'ies'} checked`
+            : 'No dependencies selected'
+          : `Waiting on ${blockingDependencies
+              .map((item) => item.task?.key ?? item.key)
+              .join(', ')}`,
+      label: 'Dependencies',
+      ready: blockingDependencies.length === 0,
+    },
+    {
+      detail:
+        agentId === reviewerId
+          ? 'Choose a different reviewer'
+          : `${kavbanAgents[reviewerId].name} reviews ${kavbanAgents[agentId].name}`,
+      label: 'Independent review',
+      ready: agentId !== reviewerId,
+    },
+    {
+      detail: branch?.trim() || 'Auto-created when task is saved',
+      label: 'Task branch',
+      ready: true,
+    },
+    {
+      detail: requiresHumanReview
+        ? 'Human approval required before merge'
+        : 'Human approval can still be requested by review',
+      label: 'Human gate',
+      ready: true,
+    },
+  ];
+}
+
 function TaskCreatePanel({
+  connectors,
   contextFiles,
   defaultAgentId,
   defaultHumanReviewRequired,
@@ -2960,6 +3065,7 @@ function TaskCreatePanel({
   onCancel,
   onCreate,
 }: {
+  connectors: Record<ConnectorId, Connector>;
   contextFiles: Project['contextFiles'];
   defaultAgentId: KavbanAgentId;
   defaultHumanReviewRequired: boolean;
@@ -3030,6 +3136,16 @@ function TaskCreatePanel({
         : [...current, key]
     );
   };
+  const readinessItems = getTaskFormReadinessItems({
+    agentId,
+    connectors,
+    contextFiles,
+    dependencyTasks,
+    requiresHumanReview,
+    reviewerId,
+    selectedContextFiles,
+    selectedDependencies,
+  });
 
   return (
     <form
@@ -3277,6 +3393,11 @@ function TaskCreatePanel({
               </div>
             </div>
           )}
+
+          <TaskReadinessChecklist
+            items={readinessItems}
+            title="Pre-run checklist"
+          />
 
           <div className="flex items-center justify-end gap-2">
             <button
@@ -3654,12 +3775,14 @@ function TasksList({
 }
 
 function TaskEditForm({
+  connectors,
   contextFiles,
   dependencyTasks,
   onCancel,
   onSave,
   task,
 }: {
+  connectors: Record<ConnectorId, Connector>;
   contextFiles: Project['contextFiles'];
   dependencyTasks: Task[];
   onCancel: () => void;
@@ -3726,6 +3849,17 @@ function TaskEditForm({
         : [...current, key]
     );
   };
+  const readinessItems = getTaskFormReadinessItems({
+    agentId,
+    branch,
+    connectors,
+    contextFiles,
+    dependencyTasks,
+    requiresHumanReview,
+    reviewerId,
+    selectedContextFiles,
+    selectedDependencies,
+  });
 
   return (
     <form
@@ -3980,6 +4114,11 @@ function TaskEditForm({
           </div>
         </div>
       )}
+
+      <TaskReadinessChecklist
+        items={readinessItems}
+        title="Pre-run checklist"
+      />
 
       <div className="flex items-center justify-end gap-2">
         <button
@@ -4609,6 +4748,7 @@ function TaskDetailPanel({
           <h2 className="text-lg font-semibold text-[#dce0e8]">Edit task</h2>
         </div>
         <TaskEditForm
+          connectors={connectors}
           contextFiles={contextFiles}
           dependencyTasks={projectTasks.filter((item) => item.id !== task.id)}
           onCancel={() => setIsEditing(false)}
@@ -6156,6 +6296,7 @@ function WorkspaceTasks({
         )}
         {isCreatingTask && (
           <TaskCreatePanel
+            connectors={connectors}
             contextFiles={contextFiles}
             defaultAgentId={agentRouting.defaultAgentId}
             defaultHumanReviewRequired={agentRouting.humanReviewRequired}

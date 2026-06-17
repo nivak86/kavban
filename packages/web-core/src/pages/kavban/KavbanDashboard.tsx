@@ -4363,12 +4363,16 @@ function TaskDetailPanel({
   const [prSummaryCopyStatus, setPrSummaryCopyStatus] = useState<
     'idle' | 'copied' | 'selected' | 'failed'
   >('idle');
+  const [runPlanCopyStatus, setRunPlanCopyStatus] = useState<
+    'idle' | 'copied' | 'selected' | 'failed'
+  >('idle');
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const contextPackRef = useRef<HTMLPreElement>(null);
   const normalizedTaskJsonRef = useRef<HTMLPreElement>(null);
   const taskHistoryRef = useRef<HTMLDivElement>(null);
   const prSummaryRef = useRef<HTMLPreElement>(null);
+  const runPlanRef = useRef<HTMLPreElement>(null);
   const dependencyItems = getDependencyItems(task, projectTasks);
   const blockingDependencies = getBlockingDependencies(task, projectTasks);
   const missingRunConnectors = getMissingTaskRunConnectors(connectors, task);
@@ -4399,6 +4403,7 @@ function TaskDetailPanel({
         : 'Blocked';
   const reviewReports = task.reviewReports ?? [];
   const fileChanges = getTaskFileChanges(task);
+  const runContextFiles = getTaskRunContextFiles(contextFiles, task);
   const pullRequestUrl = getTaskPullRequestUrl(repository, task.pr);
   const latestChangeRequest = getLatestTaskChangeRequest(task);
   const latestRunStartedAt = agentRuns[0]?.createdAt;
@@ -4470,6 +4475,14 @@ function TaskDetailPanel({
         : historyCopyStatus === 'failed'
           ? 'Copy failed'
           : 'Copy history';
+  const runPlanCopyLabel =
+    runPlanCopyStatus === 'copied'
+      ? 'Copied'
+      : runPlanCopyStatus === 'selected'
+        ? 'Selected'
+        : runPlanCopyStatus === 'failed'
+          ? 'Copy failed'
+          : 'Copy run plan';
   const prSummaryCopyLabel =
     prSummaryCopyStatus === 'copied'
       ? 'Copied'
@@ -4485,13 +4498,56 @@ function TaskDetailPanel({
   const canOpenRollback =
     task.status === 'done' && Boolean(task.mergedAt) && !task.rollbackPr;
   const canRunAiReview = canRunTaskAiReview(task);
+  const taskRunPlanText = [
+    `${task.key}: ${task.title}`,
+    '',
+    `Repository: ${repository.owner}/${repository.name}`,
+    `Default branch: ${repository.defaultBranch}`,
+    `Working branch: ${task.branch ?? 'Auto-created when run starts'}`,
+    `Assigned agent: ${getTaskAgent(task).name}`,
+    `Reviewer: ${getTaskReviewer(task).name}`,
+    `Priority: ${task.priority}`,
+    `Status: ${task.state}`,
+    '',
+    'Required connectors:',
+    ...getTaskRunConnectorIds(task).map(
+      (connectorId) =>
+        `- ${connectors[connectorId].name}: ${
+          connectors[connectorId].connected ? 'ready' : 'missing'
+        }`
+    ),
+    '',
+    'Context files:',
+    ...(runContextFiles.length > 0
+      ? runContextFiles.map((file) => `- ${file}`)
+      : ['- No context files selected']),
+    '',
+    'Dependencies:',
+    ...(dependencyItems.length > 0
+      ? dependencyItems.map(
+          (item) =>
+            `- ${item.task?.key ?? item.key}: ${
+              item.task?.status === 'done' ? 'done' : 'waiting'
+            }`
+        )
+      : ['- None']),
+    '',
+    'Checks:',
+    '- Run typecheck, lint, and build checks before handoff.',
+    '- Record failed checks and route back to Fix Required.',
+    '',
+    'Handoff:',
+    `- Send completed work to ${getTaskReviewer(task).name} for independent AI review.`,
+    '- Require human approval before merge when the task enters the merge gate.',
+  ].join('\n');
 
   useEffect(() => {
     if (
       contextCopyStatus === 'idle' &&
       taskJsonCopyStatus === 'idle' &&
       historyCopyStatus === 'idle' &&
-      prSummaryCopyStatus === 'idle'
+      prSummaryCopyStatus === 'idle' &&
+      runPlanCopyStatus === 'idle'
     ) {
       return;
     }
@@ -4501,6 +4557,7 @@ function TaskDetailPanel({
       setTaskJsonCopyStatus('idle');
       setHistoryCopyStatus('idle');
       setPrSummaryCopyStatus('idle');
+      setRunPlanCopyStatus('idle');
     }, 1800);
 
     return () => window.clearTimeout(timeout);
@@ -4508,6 +4565,7 @@ function TaskDetailPanel({
     contextCopyStatus,
     historyCopyStatus,
     prSummaryCopyStatus,
+    runPlanCopyStatus,
     taskJsonCopyStatus,
   ]);
 
@@ -4564,6 +4622,24 @@ function TaskDetailPanel({
 
     selectElementContents(taskHistoryElement);
     setHistoryCopyStatus('selected');
+  };
+  const copyTaskRunPlan = async () => {
+    const copied = await copyTextToClipboard(taskRunPlanText);
+
+    if (copied) {
+      setRunPlanCopyStatus('copied');
+      return;
+    }
+
+    const runPlanElement = runPlanRef.current;
+
+    if (!runPlanElement) {
+      setRunPlanCopyStatus('failed');
+      return;
+    }
+
+    selectElementContents(runPlanElement);
+    setRunPlanCopyStatus('selected');
   };
 
   const readinessItems = [
@@ -4729,6 +4805,7 @@ function TaskDetailPanel({
     setIsConfirmingDelete(false);
     setIsEditing(false);
     setPrSummaryCopyStatus('idle');
+    setRunPlanCopyStatus('idle');
   }, [task.id]);
 
   if (isEditing) {
@@ -4760,7 +4837,7 @@ function TaskDetailPanel({
   }
 
   return (
-    <aside className="hidden w-[380px] shrink-0 border-l border-[#24262b] bg-[#111214] xl:block">
+    <aside className="hidden w-[380px] shrink-0 overflow-y-auto border-l border-[#24262b] bg-[#111214] xl:block">
       <div className="border-b border-[#24262b] px-5 py-5">
         <div className="mb-3 flex items-center justify-between">
           <span className="font-ibm-plex-mono text-sm text-[#6f7682]">
@@ -5219,6 +5296,37 @@ function TaskDetailPanel({
         </div>
 
         <TaskReadinessChecklist items={readinessItems} />
+
+        <div>
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold text-[#dce0e8]">
+              Run plan
+            </h3>
+            <button
+              type="button"
+              onClick={copyTaskRunPlan}
+              className={cn(
+                'flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-[6px] border px-2.5 text-xs font-semibold transition-colors',
+                runPlanCopyStatus === 'copied'
+                  ? 'border-[#31553a] bg-[#172219] text-[#78d16d]'
+                  : runPlanCopyStatus === 'selected'
+                    ? 'border-[#5b4a22] bg-[#241f15] text-[#f2d14b]'
+                    : runPlanCopyStatus === 'failed'
+                      ? 'border-[#553131] bg-[#211719] text-[#f26d6d]'
+                      : 'border-[#2a2c31] bg-[#202227] text-[#cfd2da] hover:border-[#3a3d46]'
+              )}
+            >
+              <CopyIcon className="size-3.5" weight="bold" />
+              {runPlanCopyLabel}
+            </button>
+          </div>
+          <pre
+            ref={runPlanRef}
+            className="max-h-64 overflow-auto whitespace-pre-wrap rounded-[6px] border border-[#24262b] bg-[#101113] p-3 font-ibm-plex-mono text-[11px] leading-5 text-[#8d939f]"
+          >
+            {taskRunPlanText}
+          </pre>
+        </div>
 
         {task.intake && (
           <div>

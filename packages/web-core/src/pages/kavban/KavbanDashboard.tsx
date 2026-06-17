@@ -3883,10 +3883,12 @@ function TaskReadinessChecklist({
 function TaskDependencyList({
   items,
   onCompleteDependency,
+  onSelectDependency,
   taskId,
 }: {
   items: Array<{ key: string; task?: Task }>;
   onCompleteDependency: (taskId: string, dependencyId: string) => boolean;
+  onSelectDependency: (dependencyId: string) => void;
   taskId: string;
 }) {
   return (
@@ -3923,15 +3925,29 @@ function TaskDependencyList({
                   ? dependencyTask.state
                   : 'Missing'}
             </span>
-            {dependencyTask && !isDone && (
-              <button
-                type="button"
-                onClick={() => onCompleteDependency(taskId, dependencyTask.id)}
-                className="inline-flex h-6 shrink-0 items-center gap-1 rounded-[5px] border border-[#31553a] bg-[#172219] px-2 text-[11px] font-semibold text-[#78d16d] transition-colors hover:border-[#427049]"
-              >
-                <CheckCircleIcon className="size-3.5" weight="fill" />
-                Mark done
-              </button>
+            {dependencyTask && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onSelectDependency(dependencyTask.id)}
+                  className="inline-flex h-6 shrink-0 items-center gap-1 rounded-[5px] border border-[#2a2c31] bg-[#202227] px-2 text-[11px] font-semibold text-[#cfd2da] transition-colors hover:border-[#3a3d46]"
+                >
+                  <MagnifyingGlassIcon className="size-3.5" weight="bold" />
+                  Open
+                </button>
+                {!isDone && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onCompleteDependency(taskId, dependencyTask.id)
+                    }
+                    className="inline-flex h-6 shrink-0 items-center gap-1 rounded-[5px] border border-[#31553a] bg-[#172219] px-2 text-[11px] font-semibold text-[#78d16d] transition-colors hover:border-[#427049]"
+                  >
+                    <CheckCircleIcon className="size-3.5" weight="fill" />
+                    Mark done
+                  </button>
+                )}
+              </>
             )}
           </div>
         );
@@ -3955,6 +3971,7 @@ function TaskDetailPanel({
   onPauseAgentRun,
   onRecordHumanReview,
   onRecordRunCheck,
+  onSelectDependency,
   onStartAgentRun,
   onClose,
   onUpdateTask,
@@ -3989,6 +4006,7 @@ function TaskDetailPanel({
     runId: string,
     input: KavbanRecordRunCheckInput
   ) => boolean;
+  onSelectDependency: (dependencyId: string) => void;
   onStartAgentRun: (taskId: string) => string | null;
   onClose?: () => void;
   onUpdateTask: (taskId: string, input: KavbanUpdateTaskInput) => boolean;
@@ -4569,18 +4587,35 @@ function TaskDetailPanel({
                     {item.task?.title ?? 'Missing dependency'}
                   </span>
                   {item.task && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (item.task) {
-                          onCompleteDependency(task.id, item.task.id);
-                        }
-                      }}
-                      className="ml-auto inline-flex h-6 shrink-0 items-center gap-1 rounded-[5px] border border-[#31553a] bg-[#172219] px-2 text-[11px] font-semibold text-[#78d16d] transition-colors hover:border-[#427049]"
-                    >
-                      <CheckCircleIcon className="size-3.5" weight="fill" />
-                      Mark done
-                    </button>
+                    <span className="ml-auto flex shrink-0 items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (item.task) {
+                            onSelectDependency(item.task.id);
+                          }
+                        }}
+                        className="inline-flex h-6 items-center gap-1 rounded-[5px] border border-[#2a2c31] bg-[#202227] px-2 text-[11px] font-semibold text-[#cfd2da] transition-colors hover:border-[#3a3d46]"
+                      >
+                        <MagnifyingGlassIcon
+                          className="size-3.5"
+                          weight="bold"
+                        />
+                        Open
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (item.task) {
+                            onCompleteDependency(task.id, item.task.id);
+                          }
+                        }}
+                        className="inline-flex h-6 items-center gap-1 rounded-[5px] border border-[#31553a] bg-[#172219] px-2 text-[11px] font-semibold text-[#78d16d] transition-colors hover:border-[#427049]"
+                      >
+                        <CheckCircleIcon className="size-3.5" weight="fill" />
+                        Mark done
+                      </button>
+                    </span>
                   )}
                 </div>
               ))}
@@ -4753,6 +4788,7 @@ function TaskDetailPanel({
             <TaskDependencyList
               items={dependencyItems}
               onCompleteDependency={onCompleteDependency}
+              onSelectDependency={onSelectDependency}
               taskId={task.id}
             />
           </div>
@@ -4888,6 +4924,7 @@ function TaskDetailPanel({
                 <TaskDependencyList
                   items={dependencyItems}
                   onCompleteDependency={onCompleteDependency}
+                  onSelectDependency={onSelectDependency}
                   taskId={task.id}
                 />
               </div>
@@ -5361,6 +5398,15 @@ function WorkspaceTasks({
     }
   };
 
+  const handleSelectDependencyTask = (taskId: string) => {
+    resetTaskFilters();
+    onSelectTask(taskId);
+
+    if (taskView === 'board') {
+      setIsBoardDetailOpen(true);
+    }
+  };
+
   const handleTaskViewChange = (view: TaskView) => {
     if (view === 'board') {
       setIsBoardDetailOpen(false);
@@ -5735,6 +5781,7 @@ function WorkspaceTasks({
           onPauseAgentRun={onPauseAgentRun}
           onRecordHumanReview={onRecordHumanReview}
           onRecordRunCheck={onRecordRunCheck}
+          onSelectDependency={handleSelectDependencyTask}
           onStartAgentRun={onStartAgentRun}
           onClose={
             taskView === 'board' ? () => setIsBoardDetailOpen(false) : undefined

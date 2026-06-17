@@ -6739,24 +6739,80 @@ function WorkspaceTasks({
           />
         )}
         {tasks.length === 0 ? (
-          <div className="flex h-[calc(100%-73px)] flex-col items-center justify-center gap-4 px-6 py-7 text-center">
-            <ListChecksIcon className="size-9 text-[#626874]" weight="bold" />
+          <div className="flex h-[calc(100%-73px)] flex-col items-center justify-center gap-5 px-6 py-7 text-center">
+            <span className="flex size-14 items-center justify-center rounded-[10px] border border-[#24262b] bg-[#17181b] text-[#858b96]">
+              <ListChecksIcon className="size-7" weight="bold" />
+            </span>
             <div>
               <p className="text-sm font-semibold text-[#dce0e8]">
-                No tasks in this project yet
+                No tasks in this project
               </p>
               <p className="mt-1 text-sm text-[#858b96]">
-                Create the first task to start the board.
+                Start manually, import a Codex payload, or finish project setup.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => openCreateTask()}
-              className="inline-flex h-9 items-center gap-2 rounded-[6px] border border-[#2a2c31] bg-[#202227] px-3 text-xs font-semibold text-[#cfd2da] transition-colors hover:border-[#3a3d46]"
-            >
-              <PlusIcon className="size-4" weight="bold" />
-              New task
-            </button>
+            <div className="grid w-full max-w-2xl gap-2 sm:grid-cols-3">
+              <button
+                type="button"
+                onClick={() => openCreateTask()}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-[6px] border border-[#2a2c31] bg-[#202227] px-3 text-xs font-semibold text-[#cfd2da] transition-colors hover:border-[#3a3d46]"
+              >
+                <PlusIcon className="size-4" weight="bold" />
+                New task
+              </button>
+              <button
+                type="button"
+                onClick={openImportTask}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-[6px] border border-[#2a2c31] bg-[#202227] px-3 text-xs font-semibold text-[#cfd2da] transition-colors hover:border-[#3a3d46]"
+              >
+                <BracketsCurlyIcon className="size-4" weight="bold" />
+                Import Codex
+              </button>
+              <button
+                type="button"
+                onClick={() => onProjectTabChange('settings')}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-[6px] border border-[#2a2c31] bg-[#202227] px-3 text-xs font-semibold text-[#cfd2da] transition-colors hover:border-[#3a3d46]"
+              >
+                <GearIcon className="size-4" weight="bold" />
+                Project settings
+              </button>
+            </div>
+            <div className="grid w-full max-w-2xl gap-2 sm:grid-cols-3">
+              {[
+                {
+                  label: 'Context',
+                  value: `${contextFiles.filter((file) => file.injected).length}/${contextFiles.length}`,
+                  icon: FileTextIcon,
+                },
+                {
+                  label: 'Connectors',
+                  value: `${kavbanConnectorOrder.filter((connectorId) => connectors[connectorId].connected).length}/${kavbanConnectorOrder.length}`,
+                  icon: PlugsConnectedIcon,
+                },
+                {
+                  label: 'Default agent',
+                  value: kavbanAgents[agentRouting.defaultAgentId].name,
+                  icon: RobotIcon,
+                },
+              ].map((item) => {
+                const Icon = item.icon;
+
+                return (
+                  <div
+                    key={item.label}
+                    className="rounded-[7px] border border-[#24262b] bg-[#17181b] px-3 py-2 text-left"
+                  >
+                    <div className="mb-1 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#777d88]">
+                      <Icon className="size-3.5" weight="bold" />
+                      {item.label}
+                    </div>
+                    <p className="truncate text-sm font-semibold text-[#dce0e8]">
+                      {item.value}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         ) : filteredTasks.length === 0 ? (
           <div className="flex h-[calc(100%-73px)] flex-col items-center justify-center gap-4 px-6 py-7 text-center">

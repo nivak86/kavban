@@ -123,6 +123,7 @@ const taskStateByStatus: Record<KavbanTaskStatus, string> = {
   'human-review': 'Needs human',
   approved: 'Approved',
   'pr-created': 'PR created',
+  merged: 'Merged to main',
   done: 'Done',
 };
 
@@ -1107,6 +1108,7 @@ export function useKavbanLocalStore() {
       if (
         !taskToRun ||
         taskToRun.status === 'done' ||
+        taskToRun.status === 'merged' ||
         taskToRun.lockedBy ||
         getMissingRunConnectorIds(activeProject, taskToRun).length > 0 ||
         getMissingRunContextFiles(activeProject, taskToRun).length > 0 ||
@@ -1661,8 +1663,10 @@ export function useKavbanLocalStore() {
                   task.id === taskId
                     ? {
                         ...task,
-                        status: 'done',
-                        state: taskStateByStatus.done,
+                        status: isRollbackMerge ? 'done' : 'merged',
+                        state: isRollbackMerge
+                          ? taskStateByStatus.done
+                          : taskStateByStatus.merged,
                         ...(isRollbackMerge
                           ? { rolledBackAt: updatedAt }
                           : { mergedAt: updatedAt }),

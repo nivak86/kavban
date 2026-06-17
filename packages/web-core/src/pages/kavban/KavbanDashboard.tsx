@@ -284,6 +284,7 @@ const taskAdvanceActions: Partial<
   progress: { label: 'Send to AI review', status: 'ai-review' },
   'ai-review': { label: 'Request human review', status: 'human-review' },
   'fix-required': { label: 'Request agent fix', status: 'progress' },
+  merged: { label: 'Mark done', status: 'done' },
 };
 const taskFormFieldClass =
   'w-full rounded-[6px] border border-[#2a2c31] bg-[#111214] px-3 text-sm text-[#dce0e8] outline-none transition-colors placeholder:text-[#626874] focus:border-[#444956]';
@@ -593,7 +594,10 @@ const canRunTaskAiReview = (task: Task) => {
     );
 
   return (
-    task.testStatus === 'passed' && task.status !== 'done' && needsFreshAiReview
+    task.testStatus === 'passed' &&
+    task.status !== 'done' &&
+    task.status !== 'merged' &&
+    needsFreshAiReview
   );
 };
 const getDependencyItems = (task: Task, projectTasks: Task[]) =>
@@ -699,7 +703,11 @@ function StatusIcon({ task }: { task: Task }) {
       className="size-4 shrink-0"
       style={{ color: column?.color ?? '#7b818d' }}
       weight={
-        task.status === 'done' || task.status === 'approved' ? 'fill' : 'bold'
+        task.status === 'done' ||
+        task.status === 'merged' ||
+        task.status === 'approved'
+          ? 'fill'
+          : 'bold'
       }
     />
   );
@@ -4714,6 +4722,7 @@ function TaskDetailPanel({
   const agentRuns = task.agentRuns ?? [];
   const isRunAgentBlocked =
     task.status === 'done' ||
+    task.status === 'merged' ||
     blockingDependencies.length > 0 ||
     isTaskLocked ||
     missingRunConnectors.length > 0 ||
@@ -4741,6 +4750,7 @@ function TaskDetailPanel({
   const canRerunAgent =
     hasUnansweredChangeRequest &&
     task.status !== 'done' &&
+    task.status !== 'merged' &&
     task.status !== 'ready';
   const isRollbackMerge = Boolean(task.rollbackPr && !task.rolledBackAt);
   const activeMergePullRequest = isRollbackMerge ? task.rollbackPr : task.pr;
@@ -4818,10 +4828,13 @@ function TaskDetailPanel({
           : 'Copy PR summary';
   const canMergeTask =
     task.status !== 'done' &&
+    task.status !== 'merged' &&
     task.approvalStatus === 'approved' &&
     Boolean(activeMergePullRequest);
   const canOpenRollback =
-    task.status === 'done' && Boolean(task.mergedAt) && !task.rollbackPr;
+    (task.status === 'merged' || task.status === 'done') &&
+    Boolean(task.mergedAt) &&
+    !task.rollbackPr;
   const canRunAiReview = canRunTaskAiReview(task);
   const taskRunPlanText = [
     `${task.key}: ${task.title}`,
@@ -5013,11 +5026,11 @@ function TaskDetailPanel({
     },
     {
       detail:
-        task.status === 'done'
+        task.status === 'done' || task.status === 'merged'
           ? 'Closed tasks cannot be run'
           : 'Task is open for agent work',
       label: 'Task state',
-      ready: task.status !== 'done',
+      ready: task.status !== 'done' && task.status !== 'merged',
     },
   ];
   const mergeGuardItems = [
@@ -6418,7 +6431,7 @@ function WorkspaceTasks({
     () =>
       tasks.filter(
         (task) =>
-          task.status === 'done' &&
+          (task.status === 'merged' || task.status === 'done') &&
           Boolean(task.mergedAt) &&
           !task.rollbackPr
       ),

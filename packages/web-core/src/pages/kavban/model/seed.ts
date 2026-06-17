@@ -93,6 +93,12 @@ export const kavbanWorkflowColumns: KavbanWorkflowColumn[] = [
     color: '#58b957',
   },
   {
+    id: 'merged',
+    label: 'Merged to Main',
+    iconKey: 'git-pull-request',
+    color: '#78d16d',
+  },
+  {
     id: 'done',
     label: 'Done',
     iconKey: 'check-circle',

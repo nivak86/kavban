@@ -7,6 +7,7 @@ export type KavbanTaskStatus =
   | 'human-review'
   | 'approved'
   | 'pr-created'
+  | 'merged'
   | 'done';
 
 export type KavbanTaskPriority = 'High' | 'Medium' | 'Low';

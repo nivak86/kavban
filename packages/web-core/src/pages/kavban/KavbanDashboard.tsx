@@ -367,6 +367,191 @@ const codexIntakeExample = JSON.stringify(
   null,
   2
 );
+const requiredCodexContextFiles = [
+  'kavban.project.md',
+  'architecture.md',
+  'coding-rules.md',
+  'current-state.md',
+  'known-issues.md',
+  'review-checklist.md',
+];
+const getPayloadText = (payload: Record<string, unknown>, key: string) => {
+  const value = payload[key];
+
+  return typeof value === 'string' ? value.trim() : '';
+};
+const getPayloadBoolean = (
+  payload: Record<string, unknown>,
+  key: string,
+  fallback: boolean
+) => {
+  const value = payload[key];
+
+  return typeof value === 'boolean' ? value : fallback;
+};
+const getPayloadStringList = (...values: unknown[]) =>
+  values
+    .flatMap((value) => (Array.isArray(value) ? value : []))
+    .filter((value): value is string => typeof value === 'string')
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .filter((value, index, list) => list.indexOf(value) === index);
+const normalizeCodexSlug = (value: string) =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '') || 'task';
+const normalizeCodexTaskType = (value: string) => {
+  const normalized = value.trim().toLowerCase();
+
+  if (
+    ['bug', 'chore', 'docs', 'feature', 'refactor', 'test', 'tests'].includes(
+      normalized
+    )
+  ) {
+    return normalized === 'tests' ? 'test' : normalized;
+  }
+
+  return 'task';
+};
+const normalizeCodexPriority = (value: string) => {
+  const normalized = value.trim().toLowerCase();
+
+  return ['high', 'medium', 'low'].includes(normalized)
+    ? normalized
+    : 'medium';
+};
+const normalizeCodexAgent = (value: string, taskType: string) => {
+  const normalized = value.trim().toLowerCase();
+
+  if (['claude', 'claude-code', 'claude_code'].includes(normalized)) {
+    return 'claude';
+  }
+
+  if (normalized === 'codex') {
+    return 'codex';
+  }
+
+  return ['feature', 'docs', 'refactor'].includes(taskType)
+    ? 'claude'
+    : 'codex';
+};
+const createLocalCodexTaskId = () => {
+  const uuid = crypto.randomUUID?.().replace(/-/g, '');
+
+  if (uuid) {
+    return `kav-${uuid.slice(0, 8)}`;
+  }
+
+  return `kav-${Date.now().toString(36).slice(-4)}${Math.random()
+    .toString(16)
+    .slice(2, 6)}`;
+};
+const getLocalCodexContextFiles = (
+  contextTags: string[],
+  contextFiles: string[]
+) => {
+  if (contextFiles.length > 0) {
+    return contextFiles;
+  }
+
+  const files = [...requiredCodexContextFiles];
+  const normalizedTags = contextTags.map((tag) => tag.toLowerCase());
+
+  if (normalizedTags.includes('connections')) {
+    files.push('connections.md');
+  }
+
+  if (
+    normalizedTags.some((tag) =>
+      ['agent', 'agents', 'worker', 'workers', 'routing'].includes(tag)
+    )
+  ) {
+    files.push('agent-rules.md');
+  }
+
+  return files;
+};
+const createLocalCodexIntake = (
+  payload: Record<string, unknown>
+): KavbanIntakeResponse => {
+  const title = getPayloadText(payload, 'title');
+  const description = getPayloadText(payload, 'description');
+
+  if (!title || !description) {
+    throw new Error('Missing required Codex intake fields');
+  }
+
+  const taskType = normalizeCodexTaskType(
+    getPayloadText(payload, 'type') || getPayloadText(payload, 'task_type')
+  );
+  const priority = normalizeCodexPriority(getPayloadText(payload, 'priority'));
+  const assignedAgent = normalizeCodexAgent(
+    getPayloadText(payload, 'suggested_agent') ||
+      getPayloadText(payload, 'suggestedAgent'),
+    taskType
+  );
+  const requiresHumanReview = getPayloadBoolean(
+    payload,
+    'requires_human_review',
+    getPayloadBoolean(payload, 'requiresHumanReview', true)
+  );
+  const contextTags = getPayloadStringList(
+    payload.context,
+    payload.context_tags,
+    payload.contextTags
+  );
+  const contextFiles = getLocalCodexContextFiles(
+    contextTags,
+    getPayloadStringList(payload.context_files, payload.contextFiles)
+  );
+  const taskId = createLocalCodexTaskId();
+
+  return {
+    task_id: taskId,
+    status: 'backlog',
+    normalized: {
+      id: taskId,
+      project_id: normalizeCodexSlug(
+        getPayloadText(payload, 'project') || 'kavban-core'
+      ),
+      title,
+      description,
+      type: taskType,
+      priority,
+      status: 'backlog',
+      repo: {
+        provider: 'github',
+        owner: 'nivak86',
+        name: 'kavban',
+        default_branch: 'main',
+        working_branch: `kav/${taskId}-${normalizeCodexSlug(title)}`,
+      },
+      agent: {
+        assigned: assignedAgent,
+        fallback: 'codex',
+        reviewer: 'reviewer',
+      },
+      dependencies: getPayloadStringList(payload.dependencies),
+      context_files: contextFiles,
+      execution: {
+        run_tests: true,
+        create_pr: true,
+        auto_merge: false,
+        requires_human_review: requiresHumanReview,
+      },
+      review: {
+        ai_review_required: true,
+        human_review_required: requiresHumanReview,
+      },
+      created_from: {
+        source: 'browser_preview',
+        raw_input_id: `local-${taskId}`,
+      },
+    },
+  };
+};
 const createImportPayloadFromIntake = (
   intake: KavbanIntakeResponse
 ): Record<string, unknown> => ({
@@ -3765,7 +3950,43 @@ function TaskImportPanel({
 }) {
   const [payloadText, setPayloadText] = useState(codexIntakeExample);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [normalizedIntake, setNormalizedIntake] =
+    useState<KavbanIntakeResponse | null>(null);
+  const [normalizedPayloadText, setNormalizedPayloadText] = useState('');
+  const hasCurrentPreview =
+    normalizedIntake !== null && normalizedPayloadText === payloadText;
+
+  const normalizePayload = async () => {
+    const parsedPayload = JSON.parse(payloadText) as unknown;
+
+    if (
+      !parsedPayload ||
+      typeof parsedPayload !== 'object' ||
+      Array.isArray(parsedPayload)
+    ) {
+      setError('Payload must be a JSON object.');
+      return null;
+    }
+
+    const payload = parsedPayload as Record<string, unknown>;
+    let intake: KavbanIntakeResponse;
+
+    try {
+      intake = await kavbanApi.createCodexIntake(payload);
+      setNotice('');
+    } catch {
+      intake = createLocalCodexIntake(payload);
+      setNotice('Backend intake is unavailable; using the browser normalizer.');
+    }
+
+    setNormalizedIntake(intake);
+    setNormalizedPayloadText(payloadText);
+    setError('');
+
+    return intake;
+  };
 
   return (
     <form
@@ -3775,20 +3996,18 @@ function TaskImportPanel({
 
         try {
           setIsSubmitting(true);
-          const parsedPayload = JSON.parse(payloadText) as unknown;
+          const intake = hasCurrentPreview
+            ? normalizedIntake
+            : await normalizePayload();
 
-          if (
-            !parsedPayload ||
-            typeof parsedPayload !== 'object' ||
-            Array.isArray(parsedPayload)
-          ) {
-            setError('Payload must be a JSON object.');
+          if (!intake) {
             return;
           }
 
-          const intake = await kavbanApi.createCodexIntake(
-            parsedPayload as Record<string, unknown>
-          );
+          if (!hasCurrentPreview) {
+            return;
+          }
+
           const imported = onImport({
             payload: createImportPayloadFromIntake(intake),
             rawPayload: payloadText,
@@ -3801,16 +4020,21 @@ function TaskImportPanel({
 
           setError('');
           setPayloadText(codexIntakeExample);
+          setNormalizedIntake(null);
+          setNormalizedPayloadText('');
         } catch {
           setError(
             'Codex intake must be valid JSON and pass backend validation.'
           );
+          setNotice('');
+          setNormalizedIntake(null);
+          setNormalizedPayloadText('');
         } finally {
           setIsSubmitting(false);
         }
       }}
     >
-      <div className="grid gap-4 xl:grid-cols-[minmax(320px,1fr)_280px]">
+      <div className="grid gap-4 xl:grid-cols-[minmax(320px,1fr)_340px]">
         <div>
           <label
             htmlFor="codex-intake-json"
@@ -3824,6 +4048,9 @@ function TaskImportPanel({
             onChange={(event) => {
               setPayloadText(event.target.value);
               setError('');
+              setNotice('');
+              setNormalizedIntake(null);
+              setNormalizedPayloadText('');
             }}
             className={`${taskFormFieldClass} min-h-[220px] resize-y py-3 font-ibm-plex-mono text-xs leading-5`}
             spellCheck={false}
@@ -3859,9 +4086,71 @@ function TaskImportPanel({
             </div>
           </div>
 
+          {normalizedIntake && (
+            <div className="rounded-[7px] border border-[#263341] bg-[#14191f] p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-[#6f7682]">
+                    Normalized preview
+                  </p>
+                  <h3 className="truncate text-sm font-semibold text-[#dce0e8]">
+                    {normalizedIntake.normalized.title}
+                  </h3>
+                </div>
+                <CheckCircleIcon
+                  className="size-5 shrink-0 text-[#78d16d]"
+                  weight="fill"
+                />
+              </div>
+              <div className="grid gap-2 text-xs text-[#8d939f]">
+                {[
+                  ['Task ID', normalizedIntake.task_id],
+                  ['Project', normalizedIntake.normalized.project_id],
+                  ['Branch', normalizedIntake.normalized.repo.working_branch],
+                  ['Agent', normalizedIntake.normalized.agent.assigned],
+                  [
+                    'Review gate',
+                    normalizedIntake.normalized.review.human_review_required
+                      ? 'Human required'
+                      : 'AI review only',
+                  ],
+                  [
+                    'Context',
+                    `${normalizedIntake.normalized.context_files.length} files`,
+                  ],
+                ].map(([label, value]) => (
+                  <div key={label} className="flex justify-between gap-3">
+                    <span className="shrink-0">{label}</span>
+                    <span className="min-w-0 truncate text-right font-semibold text-[#cfd2da]">
+                      {value}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {normalizedIntake.normalized.context_files
+                  .slice(0, 4)
+                  .map((file) => (
+                    <span
+                      key={file}
+                      className="max-w-full truncate rounded-[5px] border border-[#2a2c31] bg-[#1b1d20] px-2 py-1 font-ibm-plex-mono text-[11px] text-[#9ca1ad]"
+                    >
+                      {file}
+                    </span>
+                  ))}
+              </div>
+            </div>
+          )}
+
           {error && (
             <div className="rounded-[7px] border border-[#553131] bg-[#211719] px-3 py-2 text-sm text-[#f26d6d]">
               {error}
+            </div>
+          )}
+
+          {notice && (
+            <div className="rounded-[7px] border border-[#544822] bg-[#211f17] px-3 py-2 text-sm text-[#d8bd57]">
+              {notice}
             </div>
           )}
 
@@ -3879,7 +4168,13 @@ function TaskImportPanel({
               className="flex h-9 items-center gap-2 rounded-[6px] border border-[#31553a] px-3 text-xs font-semibold text-[#78d16d] transition-colors hover:bg-[#172219] disabled:cursor-not-allowed disabled:opacity-60"
             >
               <BracketsCurlyIcon className="size-4" weight="bold" />
-              {isSubmitting ? 'Importing...' : 'Import task'}
+              {isSubmitting
+                ? hasCurrentPreview
+                  ? 'Importing...'
+                  : 'Normalizing...'
+                : hasCurrentPreview
+                  ? 'Import normalized'
+                  : 'Normalize task'}
             </button>
           </div>
         </div>

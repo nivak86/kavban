@@ -4100,11 +4100,15 @@ function TaskDetailPanel({
   const [historyCopyStatus, setHistoryCopyStatus] = useState<
     'idle' | 'copied' | 'selected' | 'failed'
   >('idle');
+  const [prSummaryCopyStatus, setPrSummaryCopyStatus] = useState<
+    'idle' | 'copied' | 'selected' | 'failed'
+  >('idle');
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const contextPackRef = useRef<HTMLPreElement>(null);
   const normalizedTaskJsonRef = useRef<HTMLPreElement>(null);
   const taskHistoryRef = useRef<HTMLDivElement>(null);
+  const prSummaryRef = useRef<HTMLPreElement>(null);
   const dependencyItems = getDependencyItems(task, projectTasks);
   const blockingDependencies = getBlockingDependencies(task, projectTasks);
   const missingRunConnectors = getMissingTaskRunConnectors(connectors, task);
@@ -4206,6 +4210,14 @@ function TaskDetailPanel({
         : historyCopyStatus === 'failed'
           ? 'Copy failed'
           : 'Copy history';
+  const prSummaryCopyLabel =
+    prSummaryCopyStatus === 'copied'
+      ? 'Copied'
+      : prSummaryCopyStatus === 'selected'
+        ? 'Selected'
+        : prSummaryCopyStatus === 'failed'
+          ? 'Copy failed'
+          : 'Copy PR summary';
   const canMergeTask =
     task.status !== 'done' &&
     task.approvalStatus === 'approved' &&
@@ -4218,7 +4230,8 @@ function TaskDetailPanel({
     if (
       contextCopyStatus === 'idle' &&
       taskJsonCopyStatus === 'idle' &&
-      historyCopyStatus === 'idle'
+      historyCopyStatus === 'idle' &&
+      prSummaryCopyStatus === 'idle'
     ) {
       return;
     }
@@ -4227,10 +4240,16 @@ function TaskDetailPanel({
       setContextCopyStatus('idle');
       setTaskJsonCopyStatus('idle');
       setHistoryCopyStatus('idle');
+      setPrSummaryCopyStatus('idle');
     }, 1800);
 
     return () => window.clearTimeout(timeout);
-  }, [contextCopyStatus, historyCopyStatus, taskJsonCopyStatus]);
+  }, [
+    contextCopyStatus,
+    historyCopyStatus,
+    prSummaryCopyStatus,
+    taskJsonCopyStatus,
+  ]);
 
   const copyTaskContextPack = async () => {
     const copied = await copyTextToClipboard(taskContextPackJson);
@@ -4383,12 +4402,73 @@ function TaskDetailPanel({
       ready: true,
     },
   ];
+  const taskPullRequestSummary = [
+    `# ${task.key}: ${task.title}`,
+    '',
+    `Repository: ${repository.owner}/${repository.name}`,
+    `Default branch: ${repository.defaultBranch}`,
+    `Working branch: ${task.branch ?? 'Not created'}`,
+    `Active pull request: ${activeMergePullRequest ?? 'Not opened'}`,
+    `Rollback pull request: ${task.rollbackPr ?? 'Not opened'}`,
+    `Merge state: ${
+      task.mergedAt
+        ? `Merged ${new Date(task.mergedAt).toLocaleDateString()}`
+        : task.approvalStatus === 'approved'
+          ? 'Approved for merge'
+          : 'Waiting'
+    }`,
+    '',
+    `Assigned agent: ${getTaskAgent(task).name}`,
+    `Independent reviewer: ${getTaskReviewer(task).name}`,
+    `Tests: ${task.testStatus ?? 'not-run'}`,
+    `AI review: ${task.reviewStatus ?? 'not-run'}`,
+    `Human approval: ${task.approvalStatus ?? 'pending'}`,
+    '',
+    'Description:',
+    task.description,
+    '',
+    'Files changed:',
+    ...(fileChanges.length > 0
+      ? fileChanges.map(
+          (change) =>
+            `- ${change.path} (${change.status}, +${change.additions}/-${change.deletions}): ${change.summary}`
+        )
+      : ['- No files recorded']),
+    '',
+    'Merge checklist:',
+    ...mergeGuardItems.map(
+      (item) => `- ${item.ready ? '[x]' : '[ ]'} ${item.label}: ${item.detail}`
+    ),
+    '',
+    'Safety:',
+    `- Agents cannot merge directly to ${repository.defaultBranch}.`,
+    '- Human approval and independent review stay required before merge.',
+  ].join('\n');
+  const copyTaskPullRequestSummary = async () => {
+    const copied = await copyTextToClipboard(taskPullRequestSummary);
+
+    if (copied) {
+      setPrSummaryCopyStatus('copied');
+      return;
+    }
+
+    const summaryElement = prSummaryRef.current;
+
+    if (!summaryElement) {
+      setPrSummaryCopyStatus('failed');
+      return;
+    }
+
+    selectElementContents(summaryElement);
+    setPrSummaryCopyStatus('selected');
+  };
 
   useEffect(() => {
     setCommentText('');
     setActiveDetailTab('overview');
     setIsConfirmingDelete(false);
     setIsEditing(false);
+    setPrSummaryCopyStatus('idle');
   }, [task.id]);
 
   if (isEditing) {
@@ -5343,6 +5423,36 @@ function TaskDetailPanel({
                 Approval required before PR creation
               </div>
             )}
+            <div>
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold text-[#dce0e8]">
+                  PR handoff
+                </h3>
+                <button
+                  type="button"
+                  onClick={copyTaskPullRequestSummary}
+                  className={cn(
+                    'flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-[6px] border px-2.5 text-xs font-semibold transition-colors',
+                    prSummaryCopyStatus === 'copied'
+                      ? 'border-[#31553a] bg-[#172219] text-[#78d16d]'
+                      : prSummaryCopyStatus === 'selected'
+                        ? 'border-[#5b4a22] bg-[#241f15] text-[#f2d14b]'
+                        : prSummaryCopyStatus === 'failed'
+                          ? 'border-[#553131] bg-[#211719] text-[#f26d6d]'
+                          : 'border-[#2a2c31] bg-[#202227] text-[#cfd2da] hover:border-[#3a3d46]'
+                  )}
+                >
+                  <CopyIcon className="size-3.5" weight="bold" />
+                  {prSummaryCopyLabel}
+                </button>
+              </div>
+              <pre
+                ref={prSummaryRef}
+                className="max-h-64 overflow-auto whitespace-pre-wrap rounded-[6px] border border-[#24262b] bg-[#101113] p-3 font-ibm-plex-mono text-[11px] leading-5 text-[#8d939f]"
+              >
+                {taskPullRequestSummary}
+              </pre>
+            </div>
             <TaskReadinessChecklist
               items={mergeGuardItems}
               title="Merge guard"

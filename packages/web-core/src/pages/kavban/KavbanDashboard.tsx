@@ -65,6 +65,7 @@ import type {
   KavbanAddTaskCommentInput,
   KavbanConnector as Connector,
   KavbanConnectorId as ConnectorId,
+  KavbanCreateProjectInput,
   KavbanContextFileInput,
   KavbanCreateAiReviewInput,
   KavbanCreateTaskInput,
@@ -373,6 +374,12 @@ const createImportPayloadFromIntake = (
 });
 const getProfileFirstName = (profile: Profile) =>
   profile.displayName.split(' ')[0] || profile.displayName;
+const getRepositoryNameFallback = (name: string) =>
+  name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '') || 'project';
 
 const getTaskAgent = (task: Task) => kavbanAgents[task.agentId];
 const getTaskReviewer = (task: Task) => kavbanAgents[task.reviewerId];
@@ -2574,7 +2581,7 @@ function WorkspaceHome({
 }: {
   activeProjectId: string;
   connectors: Record<ConnectorId, Connector>;
-  onCreateProject: (name: string) => void;
+  onCreateProject: (input: KavbanCreateProjectInput) => boolean;
   onSelectProject: (id: string) => void;
   onSelectTask: (id: string) => void;
   onTabChange: (tab: ProjectTab) => void;
@@ -2584,6 +2591,21 @@ function WorkspaceHome({
 }) {
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
+  const [newProjectBrief, setNewProjectBrief] = useState('');
+  const [newProjectOwner, setNewProjectOwner] = useState(
+    project.repository.owner
+  );
+  const [newProjectRepoName, setNewProjectRepoName] = useState('');
+  const [newProjectDefaultBranch, setNewProjectDefaultBranch] = useState(
+    project.repository.defaultBranch
+  );
+  const [newProjectLocalPath, setNewProjectLocalPath] = useState(
+    project.repository.localPath ?? ''
+  );
+  const [newProjectConnectorIds, setNewProjectConnectorIds] = useState<
+    ConnectorId[]
+  >(['github', 'codex']);
+  const [newProjectError, setNewProjectError] = useState('');
   const countTasks = (statuses: TaskStatus[]) =>
     project.tasks.filter((task) => statuses.includes(task.status)).length;
   const readyTasks = project.tasks.filter((task) => task.status === 'ready');
@@ -2701,6 +2723,51 @@ function WorkspaceHome({
       color: disconnectedConnectors.length === 0 ? '#78d16d' : '#f3cfa8',
     },
   ];
+  const resetNewProjectForm = () => {
+    setNewProjectName('');
+    setNewProjectBrief('');
+    setNewProjectOwner(project.repository.owner);
+    setNewProjectRepoName('');
+    setNewProjectDefaultBranch(project.repository.defaultBranch);
+    setNewProjectLocalPath(project.repository.localPath ?? '');
+    setNewProjectConnectorIds(['github', 'codex']);
+    setNewProjectError('');
+  };
+  const startCreatingProject = () => {
+    resetNewProjectForm();
+    setIsCreatingProject(true);
+  };
+  const toggleNewProjectConnector = (connectorId: ConnectorId) => {
+    setNewProjectConnectorIds((current) =>
+      current.includes(connectorId)
+        ? current.filter((id) => id !== connectorId)
+        : [...current, connectorId]
+    );
+    setNewProjectError('');
+  };
+  const submitNewProject = () => {
+    const created = onCreateProject({
+      brief: newProjectBrief,
+      connectedConnectors: newProjectConnectorIds,
+      name: newProjectName,
+      repository: {
+        owner: newProjectOwner,
+        name: newProjectRepoName || getRepositoryNameFallback(newProjectName),
+        defaultBranch: newProjectDefaultBranch,
+        localPath: newProjectLocalPath,
+      },
+    });
+
+    if (!created) {
+      setNewProjectError(
+        'Project name, repo owner, repository, and default branch are required.'
+      );
+      return;
+    }
+
+    resetNewProjectForm();
+    setIsCreatingProject(false);
+  };
 
   return (
     <div className="h-full overflow-y-auto bg-[#101113] px-6 py-7">
@@ -2863,7 +2930,7 @@ function WorkspaceHome({
             <h2 className="text-lg font-semibold text-[#dce0e8]">Projects</h2>
             <button
               type="button"
-              onClick={() => setIsCreatingProject(true)}
+              onClick={startCreatingProject}
               className="inline-flex h-8 items-center gap-2 rounded-[6px] border border-[#2a2c31] bg-[#202227] px-3 text-xs font-semibold text-[#cfd2da] transition-colors hover:border-[#3a3d46]"
             >
               <PlusIcon className="size-4" weight="bold" />
@@ -2905,31 +2972,174 @@ function WorkspaceHome({
           </div>
 
           {isCreatingProject && (
-            <div className="mt-4 flex flex-col gap-3 rounded-[7px] border border-[#24262b] bg-[#111214] p-3 sm:flex-row sm:items-center">
-              <label className="sr-only" htmlFor="new-project-name">
-                Project name
-              </label>
-              <input
-                id="new-project-name"
-                value={newProjectName}
-                onChange={(event) => setNewProjectName(event.target.value)}
-                className="h-9 min-w-0 flex-1 rounded-[6px] border border-[#2a2c31] bg-[#17181b] px-3 text-sm text-[#dce0e8] outline-none transition-colors placeholder:text-[#626874] focus:border-[#444956]"
-                placeholder="Project name"
-              />
-              <div className="flex items-center gap-2">
+            <div className="mt-4 rounded-[7px] border border-[#24262b] bg-[#111214] p-4">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <PlusIcon className="size-4 text-[#858b96]" weight="bold" />
+                  <h3 className="text-sm font-semibold text-[#dce0e8]">
+                    Project setup
+                  </h3>
+                </div>
+                <span className="rounded-full border border-[#2a2c31] px-2 py-0.5 text-[11px] font-semibold text-[#858b96]">
+                  Repo and connectors
+                </span>
+              </div>
+
+              <div className="grid gap-3 lg:grid-cols-2">
+                <label className="block" htmlFor="new-project-name">
+                  <span className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#777d88]">
+                    <FileTextIcon className="size-3.5" weight="bold" />
+                    Project name
+                  </span>
+                  <input
+                    id="new-project-name"
+                    value={newProjectName}
+                    onChange={(event) => {
+                      setNewProjectName(event.target.value);
+                      setNewProjectError('');
+                    }}
+                    className={cn(taskFormFieldClass, 'h-9')}
+                    placeholder="Mobile App"
+                  />
+                </label>
+                <label className="block" htmlFor="new-project-repo">
+                  <span className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#777d88]">
+                    <GithubLogoIcon className="size-3.5" weight="bold" />
+                    Repository
+                  </span>
+                  <input
+                    id="new-project-repo"
+                    value={newProjectRepoName}
+                    onChange={(event) => {
+                      setNewProjectRepoName(event.target.value);
+                      setNewProjectError('');
+                    }}
+                    className={cn(taskFormFieldClass, 'h-9')}
+                    placeholder="mobile-app"
+                  />
+                </label>
+                <label className="block" htmlFor="new-project-owner">
+                  <span className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#777d88]">
+                    <UserCircleIcon className="size-3.5" weight="bold" />
+                    Owner
+                  </span>
+                  <input
+                    id="new-project-owner"
+                    value={newProjectOwner}
+                    onChange={(event) => {
+                      setNewProjectOwner(event.target.value);
+                      setNewProjectError('');
+                    }}
+                    className={cn(taskFormFieldClass, 'h-9')}
+                    placeholder="nivak86"
+                  />
+                </label>
+                <label className="block" htmlFor="new-project-branch">
+                  <span className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#777d88]">
+                    <GitBranchIcon className="size-3.5" weight="bold" />
+                    Default branch
+                  </span>
+                  <input
+                    id="new-project-branch"
+                    value={newProjectDefaultBranch}
+                    onChange={(event) => {
+                      setNewProjectDefaultBranch(event.target.value);
+                      setNewProjectError('');
+                    }}
+                    className={cn(taskFormFieldClass, 'h-9')}
+                    placeholder="main"
+                  />
+                </label>
+                <label className="block lg:col-span-2" htmlFor="new-project-path">
+                  <span className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#777d88]">
+                    <TerminalIcon className="size-3.5" weight="bold" />
+                    Local path
+                  </span>
+                  <input
+                    id="new-project-path"
+                    value={newProjectLocalPath}
+                    onChange={(event) => setNewProjectLocalPath(event.target.value)}
+                    className={cn(taskFormFieldClass, 'h-9 font-ibm-plex-mono')}
+                    placeholder="/Users/kavinbakhda/Desktop/project"
+                  />
+                </label>
+                <label className="block lg:col-span-2" htmlFor="new-project-brief">
+                  <span className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#777d88]">
+                    <FileTextIcon className="size-3.5" weight="bold" />
+                    Brief
+                  </span>
+                  <textarea
+                    id="new-project-brief"
+                    value={newProjectBrief}
+                    onChange={(event) => setNewProjectBrief(event.target.value)}
+                    className={cn(
+                      taskFormFieldClass,
+                      'min-h-[84px] resize-y py-2 leading-6'
+                    )}
+                    placeholder="What should Kavban know before routing work to agents?"
+                  />
+                </label>
+              </div>
+
+              <div className="mt-4">
+                <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#777d88]">
+                  <PlugsConnectedIcon className="size-3.5" weight="bold" />
+                  Connectors
+                </div>
+                <div className="grid gap-2 md:grid-cols-3">
+                  {kavbanConnectorOrder.map((connectorId) => {
+                    const connector = connectors[connectorId];
+                    const Icon = connectorIconById[connectorId];
+                    const selected = newProjectConnectorIds.includes(connectorId);
+
+                    return (
+                      <label
+                        key={connectorId}
+                        className={cn(
+                          'flex cursor-pointer items-start gap-3 rounded-[7px] border p-3 transition-colors',
+                          selected
+                            ? 'border-[#31553a] bg-[#172219]'
+                            : 'border-[#24262b] bg-[#17181b] hover:border-[#343741]'
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          onChange={() => toggleNewProjectConnector(connectorId)}
+                          className="sr-only"
+                        />
+                        <span
+                          className={cn(
+                            'flex size-8 shrink-0 items-center justify-center rounded-[6px] border',
+                            selected
+                              ? 'border-[#31553a] text-[#78d16d]'
+                              : 'border-[#2a2c31] text-[#858b96]'
+                          )}
+                        >
+                          <Icon className="size-4" weight="bold" />
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block text-sm font-semibold text-[#dce0e8]">
+                            {connector.name}
+                          </span>
+                          <span className="mt-1 block text-xs leading-5 text-[#858b96]">
+                            {connector.description}
+                          </span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="mt-4 flex flex-col gap-3 border-t border-[#24262b] pt-4 sm:flex-row sm:items-center sm:justify-between">
+                <span className="min-h-4 text-xs font-semibold text-[#f26d6d]">
+                  {newProjectError}
+                </span>
+                <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    const trimmedName = newProjectName.trim();
-
-                    if (!trimmedName) {
-                      return;
-                    }
-
-                    onCreateProject(trimmedName);
-                    setNewProjectName('');
-                    setIsCreatingProject(false);
-                  }}
+                  onClick={submitNewProject}
                   className="h-9 rounded-[6px] border border-[#31553a] px-3 text-xs font-semibold text-[#78d16d] transition-colors hover:bg-[#172219]"
                 >
                   Create
@@ -2937,13 +3147,14 @@ function WorkspaceHome({
                 <button
                   type="button"
                   onClick={() => {
-                    setNewProjectName('');
+                    resetNewProjectForm();
                     setIsCreatingProject(false);
                   }}
                   className="h-9 rounded-[6px] border border-[#2a2c31] px-3 text-xs font-semibold text-[#9ca1ad] transition-colors hover:bg-[#202227]"
                 >
                   Cancel
                 </button>
+                </div>
               </div>
             </div>
           )}
@@ -7914,7 +8125,7 @@ function WorkspaceView({
     taskId: string,
     input?: KavbanCreateAiReviewInput
   ) => string | null;
-  onCreateProject: (name: string) => void;
+  onCreateProject: (input: KavbanCreateProjectInput) => boolean;
   onCreateTask: (input: KavbanCreateTaskInput) => string | null;
   onDeleteContextFile: (path: string) => boolean;
   onDeleteTask: (taskId: string) => boolean;

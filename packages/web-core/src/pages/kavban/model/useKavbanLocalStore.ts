@@ -78,6 +78,13 @@ export type KavbanAddTaskCommentInput = {
   body: string;
 };
 
+export type KavbanCreateProjectInput = {
+  brief: string;
+  connectedConnectors: KavbanConnectorId[];
+  name: string;
+  repository: KavbanRepositoryInput;
+};
+
 export type KavbanContextFileInput = {
   path: string;
   purpose: string;
@@ -154,37 +161,48 @@ function normalizeLookupToken(value: string) {
   return slugifyProjectName(value).toLowerCase();
 }
 
-function createProjectFromSeed(name: string): KavbanProject {
+function createProjectFromSeed(
+  input: KavbanCreateProjectInput
+): KavbanProject | null {
+  const name = input.name.trim();
+  const repository = normalizeRepository(input.repository);
+
+  if (!name || !repository) {
+    return null;
+  }
+
   const slug = slugifyProjectName(name);
   const project = structuredClone(kavbanProject);
+  const connectedConnectors = new Set(input.connectedConnectors);
 
   return {
     ...project,
     id: `project-${slug}-${Date.now().toString(36)}`,
     name,
-    brief: `${name} is a Kavban project. Add the brief, connect the repo, and define the agent context before moving tasks into Ready for Agent.`,
+    brief:
+      input.brief.trim() ||
+      `${name} is a Kavban project. Add the brief, connect the repo, and define the agent context before moving tasks into Ready for Agent.`,
     connectors: {
       ...project.connectors,
       github: {
         ...project.connectors.github,
-        connected: false,
-        status: 'Choose repository',
+        connected: connectedConnectors.has('github'),
+        status: connectedConnectors.has('github')
+          ? `${repository.owner}/${repository.name}`
+          : 'Choose repository',
       },
       claude: {
         ...project.connectors.claude,
-        connected: false,
-        status: 'Needs auth',
+        connected: connectedConnectors.has('claude'),
+        status: connectedConnectors.has('claude') ? 'Ready' : 'Needs auth',
       },
       codex: {
         ...project.connectors.codex,
-        connected: true,
-        status: 'Ready',
+        connected: connectedConnectors.has('codex'),
+        status: connectedConnectors.has('codex') ? 'Ready' : 'Install CLI',
       },
     },
-    repository: {
-      ...project.repository,
-      name: slug,
-    },
+    repository,
     tasks: [],
   };
 }
@@ -740,14 +758,12 @@ export function useKavbanLocalStore() {
     });
   }, []);
 
-  const createProject = useCallback((name: string) => {
-    const trimmedName = name.trim();
+  const createProject = useCallback((input: KavbanCreateProjectInput) => {
+    const project = createProjectFromSeed(input);
 
-    if (!trimmedName) {
-      return;
+    if (!project) {
+      return false;
     }
-
-    const project = createProjectFromSeed(trimmedName);
 
     setState((current) => ({
       ...current,
@@ -755,6 +771,8 @@ export function useKavbanLocalStore() {
       projects: [...current.projects, project],
       updatedAt: nowIso(),
     }));
+
+    return true;
   }, []);
 
   const createContextFile = useCallback(

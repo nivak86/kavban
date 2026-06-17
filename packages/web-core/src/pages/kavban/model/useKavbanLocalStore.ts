@@ -304,6 +304,36 @@ function getMissingRunContextFiles(project: KavbanProject, task: KavbanTask) {
   return runContextFiles.filter((path) => !projectContextPaths.has(path));
 }
 
+function getRunBlockerLabels(project: KavbanProject, task: KavbanTask) {
+  const blockers: string[] = [];
+
+  if (hasBlockingDependencies(task, project.tasks)) {
+    blockers.push('dependencies');
+  }
+
+  const missingConnectorIds = getMissingRunConnectorIds(project, task);
+
+  if (missingConnectorIds.length > 0) {
+    blockers.push(
+      `connectors: ${missingConnectorIds
+        .map((connectorId) => project.connectors[connectorId].name)
+        .join(', ')}`
+    );
+  }
+
+  const missingContextFiles = getMissingRunContextFiles(project, task);
+
+  if (missingContextFiles.length > 0) {
+    blockers.push(`context: ${missingContextFiles.join(', ')}`);
+  }
+
+  if (task.lockedBy) {
+    blockers.push('active worker lock');
+  }
+
+  return blockers;
+}
+
 function getLatestChangeRequest(task: KavbanTask) {
   const event = [...task.events]
     .reverse()
@@ -1912,7 +1942,7 @@ export function useKavbanLocalStore() {
                         ...task.events,
                         {
                           id: `evt-${task.id}-dependency-unblocked-${eventSuffix}`,
-                          kind: 'task-updated',
+                          kind: 'dependency-completed',
                           actor: 'system',
                           summary: `Dependency ${dependencyTask.key} completed; readiness will be recalculated.`,
                           createdAt: updatedAt,
@@ -1951,25 +1981,46 @@ export function useKavbanLocalStore() {
           project.id === current.activeProjectId
             ? {
                 ...project,
-                tasks: project.tasks.map((task) =>
-                  task.id === taskId
-                    ? {
-                        ...task,
-                        status,
-                        state: taskStateByStatus[status],
-                        events: [
-                          ...task.events,
-                          {
-                            id: eventId,
-                            kind: 'task-status-changed',
-                            actor: 'human',
-                            summary: `Task moved from ${task.state} to ${taskStateByStatus[status]}.`,
-                            createdAt: updatedAt,
-                          },
-                        ],
-                      }
-                    : task
-                ),
+                tasks: project.tasks.map((task) => {
+                  if (task.id !== taskId) {
+                    return task;
+                  }
+
+                  const nextTask = {
+                    ...task,
+                    status,
+                    state: taskStateByStatus[status],
+                  };
+                  const blockerLabels =
+                    status === 'ready'
+                      ? getRunBlockerLabels(project, nextTask)
+                      : [];
+
+                  return {
+                    ...nextTask,
+                    events: [
+                      ...task.events,
+                      {
+                        id: eventId,
+                        kind: 'task-status-changed',
+                        actor: 'human',
+                        summary: `Task moved from ${task.state} to ${taskStateByStatus[status]}.`,
+                        createdAt: updatedAt,
+                      },
+                      ...(blockerLabels.length > 0
+                        ? [
+                            {
+                              id: `evt-${taskId}-blocked-${Date.now().toString(36)}`,
+                              kind: 'task-blocked' as const,
+                              actor: 'system' as const,
+                              summary: `Task is ready but blocked by ${blockerLabels.join('; ')}.`,
+                              createdAt: updatedAt,
+                            },
+                          ]
+                        : []),
+                    ],
+                  };
+                }),
               }
             : project
         ),

@@ -53,6 +53,22 @@ export const kavbanNotificationRules: KavbanNotificationRule[] = [
     status: 'Running',
   },
   {
+    kind: 'task-blocked',
+    label: 'Task blocked',
+    description:
+      'A ready task cannot run because a dependency, connector, context file, or lock is missing.',
+    inboxKind: 'approval',
+    status: 'Blocked',
+  },
+  {
+    kind: 'dependency-completed',
+    label: 'Dependency completed',
+    description:
+      'A blocking dependency was completed and the waiting task can be reviewed again.',
+    inboxKind: 'codex',
+    status: 'Unblocked',
+  },
+  {
     kind: 'tests-failed',
     label: 'Checks failed',
     description: 'A run check failed and likely needs attention.',

@@ -8833,12 +8833,18 @@ export function KavbanDashboard() {
   }, []);
 
   const globalSearchResults = useMemo(() => {
-    const normalizedQuery = globalSearchQuery.trim().toLowerCase();
+    const normalizeSearchText = (value: string) =>
+      value
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim()
+        .replace(/\s+/g, ' ');
+    const normalizedQuery = normalizeSearchText(globalSearchQuery);
     const matchesQuery = (values: Array<string | undefined>) =>
       !normalizedQuery ||
       values
         .filter((value): value is string => Boolean(value))
-        .some((value) => value.toLowerCase().includes(normalizedQuery));
+        .some((value) => normalizeSearchText(value).includes(normalizedQuery));
     const results: GlobalSearchResult[] = [];
 
     projects.forEach((projectItem) => {
@@ -8882,6 +8888,89 @@ export function KavbanDashboard() {
             title: `${projectItem.name} settings`,
           }
         );
+      }
+
+      projectItem.contextFiles.forEach((file) => {
+        if (
+          !matchesQuery([
+            projectItem.name,
+            file.path,
+            file.purpose,
+            file.injected ? 'injected context' : 'available context',
+            'context pack',
+          ])
+        ) {
+          return;
+        }
+
+        results.push({
+          description: `${file.injected ? 'Injected' : 'Available'} - ${file.purpose}`,
+          eyebrow: 'Context file',
+          icon: FileTextIcon,
+          id: `context-${projectItem.id}-${file.path}`,
+          projectId: projectItem.id,
+          projectTab: 'settings',
+          section: 'workspace',
+          title: file.path,
+        });
+      });
+
+      kavbanConnectorOrder.forEach((connectorId) => {
+        const connector = projectItem.connectors[connectorId];
+        const setup = connectorSetupDetails[connectorId];
+
+        if (
+          !matchesQuery([
+            projectItem.name,
+            connector.name,
+            connector.description,
+            connector.status,
+            setup.command,
+            ...setup.capabilities,
+            ...setup.requirements,
+          ])
+        ) {
+          return;
+        }
+
+        results.push({
+          description: `${connector.connected ? 'Connected' : 'Needs setup'} - ${connector.status}`,
+          eyebrow: 'Connector',
+          icon: connectorIconById[connectorId],
+          id: `connector-${projectItem.id}-${connectorId}`,
+          projectId: projectItem.id,
+          projectTab: 'settings',
+          section: 'workspace',
+          title: `${connector.name} setup`,
+        });
+      });
+
+      if (
+        matchesQuery([
+          projectItem.name,
+          projectItem.repository.defaultBranch,
+          'safety policy',
+          'direct main push',
+          'force push',
+          'self approval',
+          'secrets edits',
+          'production deploy',
+          'rollback',
+          ...kavbanBlockedOperations.map((operation) => operation.label),
+          ...kavbanAllowedOperations.map((operation) => operation.label),
+        ])
+      ) {
+        results.push({
+          description:
+            'Blocked operations, merge requirements, and rollback guardrails',
+          eyebrow: 'Project safety',
+          icon: ShieldCheckIcon,
+          id: `safety-${projectItem.id}`,
+          projectId: projectItem.id,
+          projectTab: 'settings',
+          section: 'workspace',
+          title: `${projectItem.name} safety policy`,
+        });
       }
 
       projectItem.tasks.forEach((taskItem) => {

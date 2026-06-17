@@ -4075,9 +4075,13 @@ function TaskDetailPanel({
   const [contextCopyStatus, setContextCopyStatus] = useState<
     'idle' | 'copied' | 'selected' | 'failed'
   >('idle');
+  const [taskJsonCopyStatus, setTaskJsonCopyStatus] = useState<
+    'idle' | 'copied' | 'selected' | 'failed'
+  >('idle');
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const contextPackRef = useRef<HTMLPreElement>(null);
+  const normalizedTaskJsonRef = useRef<HTMLPreElement>(null);
   const dependencyItems = getDependencyItems(task, projectTasks);
   const blockingDependencies = getBlockingDependencies(task, projectTasks);
   const missingRunConnectors = getMissingTaskRunConnectors(connectors, task);
@@ -4145,6 +4149,14 @@ function TaskDetailPanel({
         : contextCopyStatus === 'failed'
           ? 'Copy failed'
           : 'Copy context';
+  const taskJsonCopyLabel =
+    taskJsonCopyStatus === 'copied'
+      ? 'Copied'
+      : taskJsonCopyStatus === 'selected'
+        ? 'Selected'
+        : taskJsonCopyStatus === 'failed'
+          ? 'Copy failed'
+          : 'Copy JSON';
   const canMergeTask =
     task.status !== 'done' &&
     task.approvalStatus === 'approved' &&
@@ -4154,14 +4166,17 @@ function TaskDetailPanel({
   const canRunAiReview = canRunTaskAiReview(task);
 
   useEffect(() => {
-    if (contextCopyStatus === 'idle') {
+    if (contextCopyStatus === 'idle' && taskJsonCopyStatus === 'idle') {
       return;
     }
 
-    const timeout = window.setTimeout(() => setContextCopyStatus('idle'), 1800);
+    const timeout = window.setTimeout(() => {
+      setContextCopyStatus('idle');
+      setTaskJsonCopyStatus('idle');
+    }, 1800);
 
     return () => window.clearTimeout(timeout);
-  }, [contextCopyStatus]);
+  }, [contextCopyStatus, taskJsonCopyStatus]);
 
   const copyTaskContextPack = async () => {
     const copied = await copyTextToClipboard(taskContextPackJson);
@@ -4180,6 +4195,24 @@ function TaskDetailPanel({
 
     selectElementContents(contextPackElement);
     setContextCopyStatus('selected');
+  };
+  const copyNormalizedTaskJson = async () => {
+    const copied = await copyTextToClipboard(normalizedTaskJson);
+
+    if (copied) {
+      setTaskJsonCopyStatus('copied');
+      return;
+    }
+
+    const taskJsonElement = normalizedTaskJsonRef.current;
+
+    if (!taskJsonElement) {
+      setTaskJsonCopyStatus('failed');
+      return;
+    }
+
+    selectElementContents(taskJsonElement);
+    setTaskJsonCopyStatus('selected');
   };
 
   const readinessItems = [
@@ -5226,10 +5259,32 @@ function TaskDetailPanel({
               ))}
             </div>
             <div className="mt-4">
-              <h3 className="mb-2 text-sm font-semibold text-[#dce0e8]">
-                Normalized task JSON
-              </h3>
-              <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded-[6px] border border-[#24262b] bg-[#101113] p-3 font-ibm-plex-mono text-[11px] leading-5 text-[#8d939f]">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold text-[#dce0e8]">
+                  Normalized task JSON
+                </h3>
+                <button
+                  type="button"
+                  onClick={copyNormalizedTaskJson}
+                  className={cn(
+                    'flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-[6px] border px-2.5 text-xs font-semibold transition-colors',
+                    taskJsonCopyStatus === 'copied'
+                      ? 'border-[#31553a] bg-[#172219] text-[#78d16d]'
+                      : taskJsonCopyStatus === 'selected'
+                        ? 'border-[#5b4a22] bg-[#241f15] text-[#f2d14b]'
+                        : taskJsonCopyStatus === 'failed'
+                          ? 'border-[#553131] bg-[#211719] text-[#f26d6d]'
+                          : 'border-[#2a2c31] bg-[#202227] text-[#cfd2da] hover:border-[#3a3d46]'
+                  )}
+                >
+                  <CopyIcon className="size-3.5" weight="bold" />
+                  {taskJsonCopyLabel}
+                </button>
+              </div>
+              <pre
+                ref={normalizedTaskJsonRef}
+                className="max-h-72 overflow-auto whitespace-pre-wrap rounded-[6px] border border-[#24262b] bg-[#101113] p-3 font-ibm-plex-mono text-[11px] leading-5 text-[#8d939f]"
+              >
                 {normalizedTaskJson}
               </pre>
             </div>

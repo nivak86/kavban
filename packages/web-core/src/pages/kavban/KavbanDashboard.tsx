@@ -57,6 +57,7 @@ import {
   kavbanDefaultAgentRouting,
   kavbanNotificationRules,
   kavbanWorkflowColumns,
+  getKavbanSensitiveFileChanges,
   useKavbanLocalStore,
 } from './model';
 import type {
@@ -649,53 +650,59 @@ const getNormalizedTaskPayload = (
   task: Task,
   repository: Project['repository'],
   contextFiles: Project['contextFiles']
-) => ({
-  task: {
-    id: task.id,
-    key: task.key,
-    title: task.title,
-    description: task.description,
-    type: task.intake?.taskType ?? task.tags[0]?.label ?? 'task',
-    priority: task.priority.toLowerCase(),
-    status: task.status,
-    repo: {
-      provider: repository.provider,
-      owner: repository.owner,
-      name: repository.name,
-      default_branch: repository.defaultBranch,
-      working_branch: task.branch ?? null,
-      pull_request: task.pr ?? null,
+) => {
+  const humanReviewRequired =
+    task.requiresHumanReview !== false ||
+    getKavbanSensitiveFileChanges(getTaskFileChanges(task)).length > 0;
+
+  return {
+    task: {
+      id: task.id,
+      key: task.key,
+      title: task.title,
+      description: task.description,
+      type: task.intake?.taskType ?? task.tags[0]?.label ?? 'task',
+      priority: task.priority.toLowerCase(),
+      status: task.status,
+      repo: {
+        provider: repository.provider,
+        owner: repository.owner,
+        name: repository.name,
+        default_branch: repository.defaultBranch,
+        working_branch: task.branch ?? null,
+        pull_request: task.pr ?? null,
+      },
+      agent: {
+        assigned: task.agentId,
+        fallback: task.agentId === 'claude' ? 'codex' : 'claude',
+        reviewer: task.reviewerId,
+      },
+      dependencies: task.dependencies,
+      context_files: getTaskRunContextFiles(contextFiles, task),
+      execution: {
+        run_tests: true,
+        create_pr: true,
+        auto_merge: false,
+        requires_human_review: humanReviewRequired,
+      },
+      review: {
+        ai_review_required: true,
+        ai_review_status: task.reviewStatus ?? 'not_started',
+        human_review_required: humanReviewRequired,
+        approval_status: task.approvalStatus ?? 'not_requested',
+      },
+      created_from: task.intake
+        ? {
+            source: task.intake.source,
+            project: task.intake.project ?? null,
+            imported_at: task.intake.importedAt,
+          }
+        : {
+            source: 'manual',
+          },
     },
-    agent: {
-      assigned: task.agentId,
-      fallback: task.agentId === 'claude' ? 'codex' : 'claude',
-      reviewer: task.reviewerId,
-    },
-    dependencies: task.dependencies,
-    context_files: getTaskRunContextFiles(contextFiles, task),
-    execution: {
-      run_tests: true,
-      create_pr: true,
-      auto_merge: false,
-      requires_human_review: task.requiresHumanReview !== false,
-    },
-    review: {
-      ai_review_required: true,
-      ai_review_status: task.reviewStatus ?? 'not_started',
-      human_review_required: task.requiresHumanReview !== false,
-      approval_status: task.approvalStatus ?? 'not_requested',
-    },
-    created_from: task.intake
-      ? {
-          source: task.intake.source,
-          project: task.intake.project ?? null,
-          imported_at: task.intake.importedAt,
-        }
-      : {
-          source: 'manual',
-        },
-  },
-});
+  };
+};
 const getTaskContextPackPayload = (
   task: Task,
   repository: Project['repository'],
@@ -5032,6 +5039,7 @@ function TaskDetailPanel({
         : 'Blocked';
   const reviewReports = task.reviewReports ?? [];
   const fileChanges = getTaskFileChanges(task);
+  const sensitiveFileChanges = getKavbanSensitiveFileChanges(fileChanges);
   const runContextFiles = getTaskRunContextFiles(contextFiles, task);
   const pullRequestUrl = getTaskPullRequestUrl(repository, task.pr);
   const latestChangeRequest = getLatestTaskChangeRequest(task);
@@ -5366,6 +5374,20 @@ function TaskDetailPanel({
       ready: task.approvalStatus === 'approved',
     },
     {
+      detail:
+        sensitiveFileChanges.length > 0
+          ? `${sensitiveFileChanges.length} sensitive change${
+              sensitiveFileChanges.length === 1 ? '' : 's'
+            }: ${sensitiveFileChanges
+              .map((change) => change.reason)
+              .join(', ')}`
+          : 'No sensitive file paths recorded',
+      label: 'Sensitive files',
+      ready:
+        sensitiveFileChanges.length === 0 ||
+        task.approvalStatus === 'approved',
+    },
+    {
       detail: `Agents cannot merge directly to ${repository.defaultBranch}`,
       label: 'Main branch',
       ready: true,
@@ -5412,6 +5434,12 @@ function TaskDetailPanel({
     'Safety:',
     `- Agents cannot merge directly to ${repository.defaultBranch}.`,
     '- Human approval and independent review stay required before merge.',
+    ...(sensitiveFileChanges.length > 0
+      ? sensitiveFileChanges.map(
+          (change) =>
+            `- Sensitive change requires human approval: ${change.path} (${change.reason}).`
+        )
+      : ['- No sensitive file paths recorded.']),
   ].join('\n');
   const copyTaskPullRequestSummary = async () => {
     const copied = await copyTextToClipboard(taskPullRequestSummary);

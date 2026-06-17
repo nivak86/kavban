@@ -11,6 +11,7 @@ import {
   createKavbanInboxNotifications,
   normalizeKavbanNotificationSettings,
 } from './notifications';
+import { getKavbanSensitiveFileChanges } from './safety';
 import type {
   KavbanAgentId,
   KavbanAgentRouting,
@@ -1465,28 +1466,37 @@ export function useKavbanLocalStore() {
 
       const updatedAt = nowIso();
       const reportId = `review-${taskId}-${Date.now().toString(36)}`;
+      const sensitiveChanges = getKavbanSensitiveFileChanges(
+        taskToReview.fileChanges
+      );
+      const requiresHumanReview =
+        taskToReview.requiresHumanReview !== false ||
+        sensitiveChanges.length > 0;
       const reviewStatus: KavbanReviewStatus =
         input.status ??
-        (taskToReview.requiresHumanReview === false
-          ? 'passed'
-          : 'needs-human');
+        (requiresHumanReview ? 'needs-human' : 'passed');
       const nextStatus: KavbanTaskStatus =
         reviewStatus === 'changes-requested'
           ? 'fix-required'
-          : reviewStatus === 'needs-human' ||
-              taskToReview.requiresHumanReview !== false
+          : reviewStatus === 'needs-human' || requiresHumanReview
             ? 'human-review'
             : 'approved';
       const reviewer = kavbanAgents[taskToReview.reviewerId];
+      const sensitiveReviewSummary =
+        sensitiveChanges.length > 0
+          ? ` Human review is required because ${sensitiveChanges
+              .map((change) => `${change.path} touches ${change.reason}`)
+              .join('; ')}.`
+          : '';
       const reviewSummary =
         input.note?.trim() ||
         (reviewStatus === 'changes-requested'
           ? `${reviewer.name} reviewed ${taskToReview.key}; changes are required before this can return to human review.`
           : reviewStatus === 'needs-human'
-            ? `${reviewer.name} reviewed ${taskToReview.key}; a human decision is needed before PR creation.`
+            ? `${reviewer.name} reviewed ${taskToReview.key}; a human decision is needed before PR creation.${sensitiveReviewSummary}`
             : `${reviewer.name} reviewed ${taskToReview.key}; tests passed and the branch is ready for ${
                 nextStatus === 'approved' ? 'PR creation' : 'human review'
-              }.`);
+              }.${sensitiveReviewSummary}`);
       const reviewChecks =
         reviewStatus === 'changes-requested'
           ? [
@@ -1499,13 +1509,24 @@ export function useKavbanLocalStore() {
             ? [
                 'Task instructions were matched against the implementation intent.',
                 'Latest agent run has a passing check result.',
-                'The reviewer found a product or risk decision for a human.',
+                sensitiveChanges.length > 0
+                  ? `Sensitive changes require human review: ${sensitiveChanges
+                      .map((change) => `${change.path} (${change.reason})`)
+                      .join('; ')}.`
+                  : 'The reviewer found a product or risk decision for a human.',
                 'Human approval is required before PR creation.',
               ]
             : [
                 'Task instructions were matched against the implementation intent.',
                 'Latest agent run has a passing check result.',
                 'Context files and dependency blockers were reviewed.',
+                ...(sensitiveChanges.length > 0
+                  ? [
+                      `Sensitive changes require human review: ${sensitiveChanges
+                        .map((change) => `${change.path} (${change.reason})`)
+                        .join('; ')}.`,
+                    ]
+                  : []),
                 'Branch scope is ready for the next approval step.',
               ];
       const report = {
@@ -1516,7 +1537,7 @@ export function useKavbanLocalStore() {
         risk:
           reviewStatus === 'changes-requested'
             ? ('high' as const)
-            : taskToReview.priority === 'High'
+            : taskToReview.priority === 'High' || sensitiveChanges.length > 0
             ? ('medium' as const)
             : ('low' as const),
         checks: reviewChecks,

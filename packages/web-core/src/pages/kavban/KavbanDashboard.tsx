@@ -7358,10 +7358,145 @@ function WorkspaceSettings({
     selectElementContents(safetyPolicyElement);
     setSafetyPolicyCopyStatus('selected');
   };
+  const connectedConnectorCount = kavbanConnectorOrder.filter(
+    (connectorId) => connectors[connectorId].connected
+  ).length;
+  const injectedContextCount = contextFiles.filter(
+    (file) => file.injected
+  ).length;
+  const setupReadinessItems = [
+    {
+      label: 'Repository',
+      body:
+        repository.owner && repository.name && repository.defaultBranch
+          ? `${repository.owner}/${repository.name} on ${repository.defaultBranch}`
+          : 'Owner, repo, and default branch are required.',
+      ready: Boolean(
+        repository.owner && repository.name && repository.defaultBranch
+      ),
+      icon: GithubLogoIcon,
+    },
+    {
+      label: 'Core connectors',
+      body: `${connectedConnectorCount}/${kavbanConnectorOrder.length} connected`,
+      ready: connectors.github.connected && connectors.codex.connected,
+      icon: PlugsConnectedIcon,
+    },
+    {
+      label: 'Required context',
+      body:
+        missingRequiredContextFiles.length === 0
+          ? 'All default context files are present.'
+          : `${missingRequiredContextFiles.length} required files missing`,
+      ready: missingRequiredContextFiles.length === 0,
+      icon: FileTextIcon,
+    },
+    {
+      label: 'Injected context',
+      body: `${injectedContextCount}/${contextFiles.length} files injected`,
+      ready: injectedContextCount > 0,
+      icon: BracketsCurlyIcon,
+    },
+    {
+      label: 'Independent review',
+      body: hasUnsafeAgentRouting(agentRouting)
+        ? 'Reviewer overlaps with a worker route.'
+        : `${kavbanAgents[agentRouting.reviewerAgentId].name} reviews agent work`,
+      ready: !hasUnsafeAgentRouting(agentRouting),
+      icon: ShieldCheckIcon,
+    },
+    {
+      label: 'Human gate',
+      body: agentRouting.humanReviewRequired
+        ? 'Human approval is required by default.'
+        : 'Human approval remains optional.',
+      ready: agentRouting.humanReviewRequired,
+      icon: UserCircleIcon,
+    },
+  ];
+  const setupReadyCount = setupReadinessItems.filter(
+    (item) => item.ready
+  ).length;
 
   return (
     <div className="h-full overflow-y-auto bg-[#101113] px-6 py-7">
       <div className="mx-auto max-w-5xl space-y-5">
+        <section className="rounded-[8px] border border-[#24262b] bg-[#17181b] p-5">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <CheckCircleIcon
+                className={cn(
+                  'size-5',
+                  setupReadyCount === setupReadinessItems.length
+                    ? 'text-[#78d16d]'
+                    : 'text-[#f2d14b]'
+                )}
+                weight="bold"
+              />
+              <div>
+                <h2 className="text-lg font-semibold text-[#dce0e8]">
+                  Setup readiness
+                </h2>
+                <p className="mt-1 text-sm text-[#858b96]">
+                  Repo, connectors, context, and approval gates for agent runs.
+                </p>
+              </div>
+            </div>
+            <span
+              className={cn(
+                'inline-flex h-8 shrink-0 items-center justify-center rounded-full border px-3 text-xs font-semibold',
+                setupReadyCount === setupReadinessItems.length
+                  ? 'border-[#31553a] text-[#78d16d]'
+                  : 'border-[#5b4a22] text-[#f2d14b]'
+              )}
+            >
+              {setupReadyCount}/{setupReadinessItems.length} ready
+            </span>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+            {setupReadinessItems.map((item) => {
+              const Icon = item.icon;
+
+              return (
+                <div
+                  key={item.label}
+                  className={cn(
+                    'rounded-[7px] border bg-[#111214] p-3',
+                    item.ready ? 'border-[#24262b]' : 'border-[#5b4a22]'
+                  )}
+                >
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <Icon
+                      className={cn(
+                        'size-4 shrink-0',
+                        item.ready ? 'text-[#78d16d]' : 'text-[#f2d14b]'
+                      )}
+                      weight="bold"
+                    />
+                    <span
+                      className={cn(
+                        'rounded-full border px-2 py-0.5 text-[11px] font-semibold',
+                        item.ready
+                          ? 'border-[#31553a] text-[#78d16d]'
+                          : 'border-[#5b4a22] text-[#f2d14b]'
+                      )}
+                    >
+                      {item.ready ? 'Ready' : 'Needs setup'}
+                    </span>
+                  </div>
+                  <p className="text-sm font-semibold text-[#dce0e8]">
+                    {item.label}
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-[#858b96]">
+                    {item.body}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
         <section className="rounded-[8px] border border-[#24262b] bg-[#17181b] p-5">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">

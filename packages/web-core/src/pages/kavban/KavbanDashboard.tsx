@@ -304,6 +304,25 @@ const getTaskLockAgent = (task: Task) =>
   task.lockedBy ? kavbanAgents[task.lockedBy] : null;
 const getTaskActivity = (task: Task) =>
   task.events.map((event) => event.summary);
+const getTaskEventActorLabel = (actor: Task['events'][number]['actor']) => {
+  if (actor in kavbanAgents) {
+    return kavbanAgents[actor as KavbanAgentId].name;
+  }
+
+  if (actor === 'codex_intake') {
+    return 'Codex intake';
+  }
+
+  if (actor === 'github') {
+    return 'GitHub';
+  }
+
+  if (actor === 'system') {
+    return 'Kavban';
+  }
+
+  return 'Human';
+};
 const getTaskFileChanges = (task: Task): NonNullable<Task['fileChanges']> => {
   if (task.fileChanges?.length) {
     return task.fileChanges;
@@ -4078,10 +4097,14 @@ function TaskDetailPanel({
   const [taskJsonCopyStatus, setTaskJsonCopyStatus] = useState<
     'idle' | 'copied' | 'selected' | 'failed'
   >('idle');
+  const [historyCopyStatus, setHistoryCopyStatus] = useState<
+    'idle' | 'copied' | 'selected' | 'failed'
+  >('idle');
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const contextPackRef = useRef<HTMLPreElement>(null);
   const normalizedTaskJsonRef = useRef<HTMLPreElement>(null);
+  const taskHistoryRef = useRef<HTMLDivElement>(null);
   const dependencyItems = getDependencyItems(task, projectTasks);
   const blockingDependencies = getBlockingDependencies(task, projectTasks);
   const missingRunConnectors = getMissingTaskRunConnectors(connectors, task);
@@ -4141,6 +4164,24 @@ function TaskDetailPanel({
     null,
     2
   );
+  const taskHistoryJson = JSON.stringify(
+    {
+      task: {
+        id: task.id,
+        key: task.key,
+        title: task.title,
+        status: task.status,
+        state: task.state,
+      },
+      events: task.events,
+      comments: task.comments ?? [],
+      agent_runs: agentRuns,
+      review_reports: reviewReports,
+      file_changes: fileChanges,
+    },
+    null,
+    2
+  );
   const contextCopyLabel =
     contextCopyStatus === 'copied'
       ? 'Copied'
@@ -4157,6 +4198,14 @@ function TaskDetailPanel({
         : taskJsonCopyStatus === 'failed'
           ? 'Copy failed'
           : 'Copy JSON';
+  const historyCopyLabel =
+    historyCopyStatus === 'copied'
+      ? 'Copied'
+      : historyCopyStatus === 'selected'
+        ? 'Selected'
+        : historyCopyStatus === 'failed'
+          ? 'Copy failed'
+          : 'Copy history';
   const canMergeTask =
     task.status !== 'done' &&
     task.approvalStatus === 'approved' &&
@@ -4166,17 +4215,22 @@ function TaskDetailPanel({
   const canRunAiReview = canRunTaskAiReview(task);
 
   useEffect(() => {
-    if (contextCopyStatus === 'idle' && taskJsonCopyStatus === 'idle') {
+    if (
+      contextCopyStatus === 'idle' &&
+      taskJsonCopyStatus === 'idle' &&
+      historyCopyStatus === 'idle'
+    ) {
       return;
     }
 
     const timeout = window.setTimeout(() => {
       setContextCopyStatus('idle');
       setTaskJsonCopyStatus('idle');
+      setHistoryCopyStatus('idle');
     }, 1800);
 
     return () => window.clearTimeout(timeout);
-  }, [contextCopyStatus, taskJsonCopyStatus]);
+  }, [contextCopyStatus, historyCopyStatus, taskJsonCopyStatus]);
 
   const copyTaskContextPack = async () => {
     const copied = await copyTextToClipboard(taskContextPackJson);
@@ -4213,6 +4267,24 @@ function TaskDetailPanel({
 
     selectElementContents(taskJsonElement);
     setTaskJsonCopyStatus('selected');
+  };
+  const copyTaskHistory = async () => {
+    const copied = await copyTextToClipboard(taskHistoryJson);
+
+    if (copied) {
+      setHistoryCopyStatus('copied');
+      return;
+    }
+
+    const taskHistoryElement = taskHistoryRef.current;
+
+    if (!taskHistoryElement) {
+      setHistoryCopyStatus('failed');
+      return;
+    }
+
+    selectElementContents(taskHistoryElement);
+    setHistoryCopyStatus('selected');
   };
 
   const readinessItems = [
@@ -5090,10 +5162,65 @@ function TaskDetailPanel({
         )}
 
         {activeDetailTab === 'chat' && (
-          <div>
-          <h3 className="mb-2 text-sm font-semibold text-[#dce0e8]">
-            Chat history
-          </h3>
+          <div className="space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold text-[#dce0e8]">
+              Chat history
+            </h3>
+            <button
+              type="button"
+              onClick={copyTaskHistory}
+              className={cn(
+                'flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-[6px] border px-2.5 text-xs font-semibold transition-colors',
+                historyCopyStatus === 'copied'
+                  ? 'border-[#31553a] bg-[#172219] text-[#78d16d]'
+                  : historyCopyStatus === 'selected'
+                    ? 'border-[#5b4a22] bg-[#241f15] text-[#f2d14b]'
+                    : historyCopyStatus === 'failed'
+                      ? 'border-[#553131] bg-[#211719] text-[#f26d6d]'
+                      : 'border-[#2a2c31] bg-[#202227] text-[#cfd2da] hover:border-[#3a3d46]'
+              )}
+            >
+              <CopyIcon className="size-3.5" weight="bold" />
+              {historyCopyLabel}
+            </button>
+          </div>
+          <div
+            ref={taskHistoryRef}
+            className="rounded-[7px] border border-[#24262b] bg-[#17181b] p-3"
+          >
+            <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#dce0e8]">
+              <ClockIcon className="size-4 text-[#858b96]" weight="bold" />
+              Event timeline
+            </div>
+            <div className="space-y-3">
+              {task.events.map((event) => (
+                <div key={event.id} className="flex gap-3 text-sm">
+                  <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border border-[#353841] bg-[#202227]">
+                    <ClockIcon className="size-3.5 text-[#858b96]" />
+                  </span>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                      <span className="font-semibold text-[#cfd2da]">
+                        {getTaskEventActorLabel(event.actor)}
+                      </span>
+                      <span className="font-ibm-plex-mono text-[#777d88]">
+                        {new Date(event.createdAt).toLocaleString([], {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
+                    </div>
+                    <p className="mt-1 leading-5 text-[#8d939f]">
+                      {event.summary}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
           <form
             className="mb-3 space-y-2"
             onSubmit={(event) => {

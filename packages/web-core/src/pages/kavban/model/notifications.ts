@@ -185,14 +185,17 @@ function createInboxItemFromEvent(
 }
 
 export function createKavbanInboxNotifications({
+  dismissedItemIds,
   manualItems,
   projects,
   settings,
 }: {
+  dismissedItemIds: string[];
   manualItems: KavbanInboxItem[];
   projects: KavbanProject[];
   settings: KavbanNotificationSettings;
 }) {
+  const dismissedItems = new Set(dismissedItemIds);
   const eventItems = projects
     .flatMap((project) =>
       project.tasks.flatMap((task) =>
@@ -207,7 +210,13 @@ export function createKavbanInboxNotifications({
     .map(({ event, project, task }) =>
       createInboxItemFromEvent(project, task, event)
     )
-    .filter((item): item is KavbanInboxItem => Boolean(item));
+    .filter(
+      (item): item is KavbanInboxItem =>
+        item !== null && !dismissedItems.has(item.id)
+    );
 
-  return [...eventItems, ...manualItems].slice(0, 40);
+  return [
+    ...eventItems,
+    ...manualItems.filter((item) => !dismissedItems.has(item.id)),
+  ].slice(0, 40);
 }

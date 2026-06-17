@@ -2068,6 +2068,23 @@ export function useKavbanLocalStore() {
     },
     []
   );
+  const dismissInboxItem = useCallback((itemId: string) => {
+    const trimmedItemId = itemId.trim();
+
+    if (!trimmedItemId) {
+      return false;
+    }
+
+    setState((current) => ({
+      ...current,
+      dismissedInboxItemIds: Array.from(
+        new Set([...current.dismissedInboxItemIds, trimmedItemId])
+      ),
+      updatedAt: nowIso(),
+    }));
+
+    return true;
+  }, []);
 
   return {
     activeProjectId: state.activeProjectId,
@@ -2079,8 +2096,10 @@ export function useKavbanLocalStore() {
     createTask,
     deleteContextFile,
     deleteTask,
+    dismissInboxItem,
     importCodexTask,
     inboxItems: createKavbanInboxNotifications({
+      dismissedItemIds: state.dismissedInboxItemIds,
       manualItems: state.inboxItems,
       projects: state.projects,
       settings: normalizeKavbanNotificationSettings(

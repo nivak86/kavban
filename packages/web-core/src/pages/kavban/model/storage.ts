@@ -14,6 +14,7 @@ export const KAVBAN_STORAGE_KEY = 'kavban.local-state.v1';
 export type KavbanLocalState = {
   version: typeof KAVBAN_STORAGE_VERSION;
   activeProjectId: string;
+  dismissedInboxItemIds: string[];
   inboxItems: KavbanInboxItem[];
   profile: KavbanProfile;
   projects: KavbanProject[];
@@ -42,6 +43,7 @@ export function createKavbanSeedState(): KavbanLocalState {
   return {
     version: KAVBAN_STORAGE_VERSION,
     activeProjectId: project.id,
+    dismissedInboxItemIds: [],
     inboxItems: structuredClone(kavbanInboxItems),
     profile: structuredClone(kavbanProfile),
     projects: [project],
@@ -173,6 +175,9 @@ export function migrateKavbanLocalState(value: unknown): KavbanLocalState {
   if (isKavbanLocalState(value)) {
     return {
       ...value,
+      dismissedInboxItemIds: Array.isArray(value.dismissedInboxItemIds)
+        ? value.dismissedInboxItemIds
+        : [],
       profile: normalizeKavbanProfile(value.profile),
       projects: value.projects.map(normalizeKavbanProject),
     };
@@ -182,6 +187,7 @@ export function migrateKavbanLocalState(value: unknown): KavbanLocalState {
     return {
       version: KAVBAN_STORAGE_VERSION,
       activeProjectId: value.project.id,
+      dismissedInboxItemIds: [],
       inboxItems: value.inboxItems,
       profile: normalizeKavbanProfile(value.profile),
       projects: [normalizeKavbanProject(value.project)],

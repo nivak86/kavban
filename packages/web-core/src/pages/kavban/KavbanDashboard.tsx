@@ -2137,6 +2137,7 @@ function InboxView({
   activeProjectId,
   inboxItems,
   onAddTaskComment,
+  onDismissInboxItem,
   onOpenTask,
   onRecordHumanReview,
   projects,
@@ -2149,6 +2150,7 @@ function InboxView({
     taskId: string,
     input: KavbanAddTaskCommentInput
   ) => boolean;
+  onDismissInboxItem: (itemId: string) => boolean;
   onOpenTask: (projectId: string, taskId: string) => void;
   onRecordHumanReview: (
     taskId: string,
@@ -2230,7 +2232,10 @@ function InboxView({
       setCommandState('Added to task chat');
     }
   };
-  const saveQuickTriageNote = (body: string) => {
+  const saveQuickTriageNote = (
+    body: string,
+    options: { dismissAfterSave?: boolean } = {}
+  ) => {
     if (!task) {
       setCommandState('No linked task');
       return;
@@ -2244,8 +2249,14 @@ function InboxView({
     const saved = onAddTaskComment(task.id, { body });
 
     if (saved) {
+      if (options.dismissAfterSave && selected) {
+        onDismissInboxItem(selected.id);
+      }
+
       setCommandText('');
-      setCommandState('Added to task chat');
+      setCommandState(
+        options.dismissAfterSave ? 'Acknowledged' : 'Added to task chat'
+      );
     }
   };
   const recordInboxApproval = (status: 'approved' | 'changes-requested') => {
@@ -2266,6 +2277,10 @@ function InboxView({
           : 'Inbox triage: human requested changes before merge.',
       status,
     });
+
+    if (saved && selected) {
+      onDismissInboxItem(selected.id);
+    }
 
     setCommandState(saved ? 'Review recorded' : 'Review not available');
   };
@@ -2467,7 +2482,9 @@ function InboxView({
                 <button
                   type="button"
                   onClick={() =>
-                    saveQuickTriageNote('Inbox triage: acknowledged.')
+                    saveQuickTriageNote('Inbox triage: acknowledged.', {
+                      dismissAfterSave: true,
+                    })
                   }
                   className="inline-flex h-8 items-center gap-2 rounded-[6px] border border-[#2a2c31] bg-[#202227] px-3 text-xs font-semibold text-[#cfd2da] transition-colors hover:border-[#3a3d46]"
                 >
@@ -8581,6 +8598,7 @@ export function KavbanDashboard() {
     createTask,
     deleteContextFile,
     deleteTask,
+    dismissInboxItem,
     importCodexTask,
     inboxItems,
     mergeTaskPullRequest,
@@ -8887,6 +8905,7 @@ export function KavbanDashboard() {
               activeProjectId={activeProjectId}
               inboxItems={inboxItems}
               onAddTaskComment={addTaskComment}
+              onDismissInboxItem={dismissInboxItem}
               onOpenTask={(projectId, taskId) => {
                 if (projectId !== activeProjectId) {
                   selectProject(projectId);

@@ -207,6 +207,14 @@ const inboxFilterOptions: Array<{
   { id: 'approval', label: 'Approval', icon: ShieldCheckIcon },
   { id: 'github', label: 'GitHub', icon: GithubLogoIcon },
 ];
+const criticalNotificationKinds: KavbanNotificationEventKind[] = [
+  'tests-failed',
+  'approval-needed',
+  'changes-requested',
+  'pr-opened',
+  'merge-completed',
+  'rollback-opened',
+];
 
 const workflowColumns = kavbanWorkflowColumns;
 const agentOptions: KavbanAgentId[] = ['codex', 'claude'];
@@ -8446,6 +8454,21 @@ function SettingsView({
   ) => void;
   onSearchOpen: () => void;
 }) {
+  const enabledNotificationCount = kavbanNotificationRules.filter(
+    (rule) => notificationSettings[rule.kind]
+  ).length;
+  const totalNotificationCount = kavbanNotificationRules.length;
+  const disabledNotificationCount =
+    totalNotificationCount - enabledNotificationCount;
+  const applyNotificationPreset = (preset: 'all' | 'critical') => {
+    kavbanNotificationRules.forEach((rule) => {
+      onNotificationSettingChange(
+        rule.kind,
+        preset === 'all' || criticalNotificationKinds.includes(rule.kind)
+      );
+    });
+  };
+
   return (
     <div className="h-full overflow-y-auto bg-[#101113]">
       <TopBar title="Settings" eyebrow="App" onSearchOpen={onSearchOpen} />
@@ -8500,7 +8523,57 @@ function SettingsView({
                 Choose which task events appear in the Inbox triage feed.
               </p>
             </div>
-            <RocketIcon className="size-5 shrink-0 text-[#858b96]" weight="bold" />
+            <span className="inline-flex h-8 shrink-0 items-center gap-2 rounded-full border border-[#2a2c31] px-3 text-xs font-semibold text-[#9ca1ad]">
+              <RocketIcon className="size-3.5" weight="bold" />
+              {enabledNotificationCount}/{totalNotificationCount} on
+            </span>
+          </div>
+
+          <div className="mb-4 grid gap-3 rounded-[7px] border border-[#24262b] bg-[#111214] p-3 lg:grid-cols-[1fr_auto] lg:items-center">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div>
+                <p className="font-ibm-plex-mono text-lg font-semibold text-[#dce0e8]">
+                  {enabledNotificationCount}
+                </p>
+                <p className="text-xs font-semibold text-[#858b96]">
+                  enabled
+                </p>
+              </div>
+              <div>
+                <p className="font-ibm-plex-mono text-lg font-semibold text-[#dce0e8]">
+                  {disabledNotificationCount}
+                </p>
+                <p className="text-xs font-semibold text-[#858b96]">
+                  muted
+                </p>
+              </div>
+              <div>
+                <p className="font-ibm-plex-mono text-lg font-semibold text-[#dce0e8]">
+                  {criticalNotificationKinds.length}
+                </p>
+                <p className="text-xs font-semibold text-[#858b96]">
+                  critical
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap justify-start gap-2 lg:justify-end">
+              <button
+                type="button"
+                onClick={() => applyNotificationPreset('all')}
+                className="inline-flex h-8 items-center gap-2 rounded-[6px] border border-[#31553a] px-3 text-xs font-semibold text-[#78d16d] transition-colors hover:bg-[#172219]"
+              >
+                <CheckCircleIcon className="size-3.5" weight="bold" />
+                Enable all
+              </button>
+              <button
+                type="button"
+                onClick={() => applyNotificationPreset('critical')}
+                className="inline-flex h-8 items-center gap-2 rounded-[6px] border border-[#2a2c31] px-3 text-xs font-semibold text-[#cfd2da] transition-colors hover:bg-[#202227]"
+              >
+                <ShieldCheckIcon className="size-3.5" weight="bold" />
+                Critical only
+              </button>
+            </div>
           </div>
 
           <div className="grid gap-3 lg:grid-cols-2">

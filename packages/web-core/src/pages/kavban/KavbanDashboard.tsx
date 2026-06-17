@@ -1810,19 +1810,40 @@ function IconButton({
 
 function Sidebar({
   activeSection,
+  inboxCount,
   onSearchOpen,
   onSectionChange,
   profile,
+  settingsIssueCount,
+  workspaceIssueCount,
 }: {
   activeSection: AppSection;
+  inboxCount: number;
   onSearchOpen: () => void;
   onSectionChange: (section: AppSection) => void;
   profile: Profile;
+  settingsIssueCount: number;
+  workspaceIssueCount: number;
 }) {
-  const topItems: { id: AppSection; label: string; icon: PhosphorIcon }[] = [
-    { id: 'inbox', label: 'Inbox', icon: ArchiveIcon },
-    { id: 'workspace', label: 'Workspace', icon: KanbanIcon },
-    { id: 'settings', label: 'Settings', icon: GearIcon },
+  const topItems: {
+    badge?: number;
+    id: AppSection;
+    label: string;
+    icon: PhosphorIcon;
+  }[] = [
+    { id: 'inbox', label: 'Inbox', icon: ArchiveIcon, badge: inboxCount },
+    {
+      id: 'workspace',
+      label: 'Workspace',
+      icon: KanbanIcon,
+      badge: workspaceIssueCount,
+    },
+    {
+      id: 'settings',
+      label: 'Settings',
+      icon: GearIcon,
+      badge: settingsIssueCount,
+    },
   ];
 
   return (
@@ -1876,7 +1897,12 @@ function Sidebar({
               )}
             >
               <Icon className="size-5 shrink-0" weight="bold" />
-              {item.label}
+              <span className="min-w-0 flex-1 truncate">{item.label}</span>
+              {Boolean(item.badge) && (
+                <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full border border-[#353841] bg-[#202227] px-1.5 font-ibm-plex-mono text-[11px] font-semibold text-[#cfd2da]">
+                  {item.badge}
+                </span>
+              )}
             </button>
           );
         })}
@@ -8331,6 +8357,39 @@ export function KavbanDashboard() {
 
     return results.slice(0, 18);
   }, [globalSearchQuery, inboxItems, profile, projects]);
+  const sidebarSettingsIssueCount = kavbanConnectorOrder.filter(
+    (connectorId) => !project.connectors[connectorId].connected
+  ).length;
+  const sidebarWorkspaceIssueCount = project.tasks.filter((task) => {
+    if (task.status === 'fix-required' || task.status === 'human-review') {
+      return true;
+    }
+
+    if (
+      task.status === 'approved' &&
+      task.approvalStatus === 'approved' &&
+      !task.pr
+    ) {
+      return true;
+    }
+
+    if (
+      task.status === 'pr-created' &&
+      task.approvalStatus === 'approved' &&
+      task.pr
+    ) {
+      return true;
+    }
+
+    return Boolean(
+      getTaskBlockerSummary(
+        task,
+        project.tasks,
+        project.connectors,
+        project.contextFiles
+      )
+    );
+  }).length;
 
   const toggleConnector = (id: ConnectorId) => {
     updateConnector(id, (connector) => ({
@@ -8395,9 +8454,12 @@ export function KavbanDashboard() {
       <div className="flex h-full min-h-0 overflow-hidden rounded-[14px] border border-[#2b2e34] bg-[#111214] shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
         <Sidebar
           activeSection={activeSection}
+          inboxCount={inboxItems.length}
           onSearchOpen={openSearch}
           onSectionChange={handleSectionChange}
           profile={profile}
+          settingsIssueCount={sidebarSettingsIssueCount}
+          workspaceIssueCount={sidebarWorkspaceIssueCount}
         />
         <main className="min-w-0 flex-1 overflow-hidden">
           {activeSection === 'inbox' && (

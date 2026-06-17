@@ -8,6 +8,7 @@ import {
 } from 'react';
 import type { IconProps } from '@phosphor-icons/react';
 import {
+  ArrowSquareOutIcon,
   ArchiveIcon,
   BracketsCurlyIcon,
   CaretDownIcon,
@@ -134,6 +135,18 @@ function selectElementContents(element: HTMLElement) {
 type AppSection = 'inbox' | 'workspace' | 'settings' | 'profile';
 type ProjectTab = 'home' | 'tasks' | 'settings';
 type TaskView = 'board' | 'list';
+type GlobalSearchResult = {
+  description: string;
+  eyebrow: string;
+  icon: PhosphorIcon;
+  id: string;
+  inboxId?: string;
+  projectId?: string;
+  projectTab?: ProjectTab;
+  section: AppSection;
+  taskId?: string;
+  title: string;
+};
 
 const workflowIconByKey: Record<KavbanWorkflowIconKey, PhosphorIcon> = {
   tray: TrayIcon,
@@ -1797,10 +1810,12 @@ function IconButton({
 
 function Sidebar({
   activeSection,
+  onSearchOpen,
   onSectionChange,
   profile,
 }: {
   activeSection: AppSection;
+  onSearchOpen: () => void;
   onSectionChange: (section: AppSection) => void;
   profile: Profile;
 }) {
@@ -1827,7 +1842,11 @@ function Sidebar({
           <CaretDownIcon className="size-4 text-[#727884]" weight="bold" />
         </button>
         <div className="flex shrink-0 items-center gap-2">
-          <IconButton label="Search" icon={MagnifyingGlassIcon} />
+          <IconButton
+            label="Search"
+            icon={MagnifyingGlassIcon}
+            onClick={onSearchOpen}
+          />
           <button
             type="button"
             onClick={() => onSectionChange('workspace')}
@@ -1887,10 +1906,12 @@ function Sidebar({
 function TopBar({
   title,
   eyebrow,
+  onSearchOpen,
   rightSlot,
 }: {
   title: string;
   eyebrow?: string;
+  onSearchOpen?: () => void;
   rightSlot?: React.ReactNode;
 }) {
   return (
@@ -1906,13 +1927,113 @@ function TopBar({
       <div className="flex items-center gap-2 overflow-x-auto">
         {rightSlot ?? (
           <>
-            <IconButton label="Search" icon={MagnifyingGlassIcon} />
+            <IconButton
+              label="Search"
+              icon={MagnifyingGlassIcon}
+              onClick={onSearchOpen}
+            />
             <IconButton label="Filter" icon={FunnelSimpleIcon} />
             <IconButton label="Display" icon={SlidersHorizontalIcon} />
           </>
         )}
       </div>
     </header>
+  );
+}
+
+function GlobalSearchOverlay({
+  onClose,
+  onQueryChange,
+  onSelectResult,
+  query,
+  results,
+}: {
+  onClose: () => void;
+  onQueryChange: (value: string) => void;
+  onSelectResult: (result: GlobalSearchResult) => void;
+  query: string;
+  results: GlobalSearchResult[];
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center bg-black/55 px-4 pt-[12vh]"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div className="w-full max-w-2xl overflow-hidden rounded-[10px] border border-[#2b2e34] bg-[#111214] shadow-[0_24px_80px_rgba(0,0,0,0.55)]">
+        <div className="flex min-h-14 items-center gap-3 border-b border-[#24262b] px-4">
+          <MagnifyingGlassIcon
+            className="size-5 shrink-0 text-[#777d88]"
+            weight="bold"
+          />
+          <input
+            autoFocus
+            value={query}
+            onChange={(event) => onQueryChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                onClose();
+              }
+            }}
+            className="h-12 min-w-0 flex-1 bg-transparent text-base font-semibold text-[#dce0e8] outline-none placeholder:text-[#626874]"
+            placeholder="Search tasks, projects, inbox"
+          />
+          <IconButton label="Close search" icon={XIcon} onClick={onClose} />
+        </div>
+        <div className="max-h-[54vh] overflow-y-auto p-2">
+          {results.length > 0 ? (
+            <div className="space-y-1">
+              {results.map((result) => {
+                const Icon = result.icon;
+
+                return (
+                  <button
+                    key={result.id}
+                    type="button"
+                    onClick={() => onSelectResult(result)}
+                    className="grid w-full grid-cols-[36px_1fr_auto] items-center gap-3 rounded-[8px] px-3 py-3 text-left transition-colors hover:bg-[#1f2126]"
+                  >
+                    <span className="flex size-9 items-center justify-center rounded-full border border-[#2d3036] bg-[#181a1e] text-[#bfc3cd]">
+                      <Icon className="size-4" weight="bold" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="mb-0.5 block text-[11px] font-semibold uppercase text-[#626874]">
+                        {result.eyebrow}
+                      </span>
+                      <span className="block truncate text-sm font-semibold text-[#d8dbe3]">
+                        {result.title}
+                      </span>
+                      <span className="block truncate text-sm text-[#858b96]">
+                        {result.description}
+                      </span>
+                    </span>
+                    <ArrowSquareOutIcon
+                      className="size-4 text-[#626874]"
+                      weight="bold"
+                    />
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="flex min-h-36 flex-col items-center justify-center gap-3 text-center">
+              <MagnifyingGlassIcon
+                className="size-8 text-[#626874]"
+                weight="bold"
+              />
+              <div>
+                <p className="text-sm font-semibold text-[#dce0e8]">
+                  No results
+                </p>
+                <p className="mt-1 text-sm text-[#858b96]">
+                  Try a task key, branch, project, or inbox source.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -7434,16 +7555,18 @@ function WorkspaceView({
 function SettingsView({
   notificationSettings,
   onNotificationSettingChange,
+  onSearchOpen,
 }: {
   notificationSettings: KavbanNotificationSettings;
   onNotificationSettingChange: (
     kind: KavbanNotificationEventKind,
     enabled: boolean
   ) => void;
+  onSearchOpen: () => void;
 }) {
   return (
     <div className="h-full overflow-y-auto bg-[#101113]">
-      <TopBar title="Settings" eyebrow="App" />
+      <TopBar title="Settings" eyebrow="App" onSearchOpen={onSearchOpen} />
       <div className="mx-auto grid max-w-5xl gap-4 px-6 py-7 md:grid-cols-2">
         {[
           {
@@ -7546,9 +7669,11 @@ function SettingsView({
 
 function ProfileView({
   onProfileChange,
+  onSearchOpen,
   profile,
 }: {
   onProfileChange: (input: KavbanProfileInput) => boolean;
+  onSearchOpen: () => void;
   profile: Profile;
 }) {
   const [displayName, setDisplayName] = useState(profile.displayName);
@@ -7584,7 +7709,11 @@ function ProfileView({
 
   return (
     <div className="h-full overflow-y-auto bg-[#101113]">
-      <TopBar title={getProfileFirstName(profile)} eyebrow="Profile" />
+      <TopBar
+        title={getProfileFirstName(profile)}
+        eyebrow="Profile"
+        onSearchOpen={onSearchOpen}
+      />
       <div className="mx-auto max-w-4xl px-6 py-7">
         <form
           className="rounded-[8px] border border-[#24262b] bg-[#17181b] p-5"
@@ -7786,6 +7915,8 @@ export function KavbanDashboard() {
   const [taskView, setTaskView] = useState<TaskView>('board');
   const [selectedTaskId, setSelectedTaskId] = useState('kav-000123');
   const [selectedInboxId, setSelectedInboxId] = useState('inbox-1');
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [globalSearchQuery, setGlobalSearchQuery] = useState('');
 
   useEffect(() => {
     if (
@@ -7804,6 +7935,153 @@ export function KavbanDashboard() {
       setSelectedInboxId(inboxItems[0].id);
     }
   }, [inboxItems, selectedInboxId]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setIsSearchOpen(true);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const globalSearchResults = useMemo(() => {
+    const normalizedQuery = globalSearchQuery.trim().toLowerCase();
+    const matchesQuery = (values: Array<string | undefined>) =>
+      !normalizedQuery ||
+      values
+        .filter((value): value is string => Boolean(value))
+        .some((value) => value.toLowerCase().includes(normalizedQuery));
+    const results: GlobalSearchResult[] = [];
+
+    projects.forEach((projectItem) => {
+      if (
+        matchesQuery([
+          projectItem.name,
+          projectItem.brief,
+          projectItem.repository.owner,
+          projectItem.repository.name,
+        ])
+      ) {
+        results.push(
+          {
+            description: projectItem.brief,
+            eyebrow: 'Project home',
+            icon: HouseIcon,
+            id: `project-home-${projectItem.id}`,
+            projectId: projectItem.id,
+            projectTab: 'home',
+            section: 'workspace',
+            title: projectItem.name,
+          },
+          {
+            description: `${projectItem.tasks.length} task${projectItem.tasks.length === 1 ? '' : 's'} in ${projectItem.repository.owner}/${projectItem.repository.name}`,
+            eyebrow: 'Project tasks',
+            icon: KanbanIcon,
+            id: `project-tasks-${projectItem.id}`,
+            projectId: projectItem.id,
+            projectTab: 'tasks',
+            section: 'workspace',
+            title: `${projectItem.name} tasks`,
+          },
+          {
+            description: 'Brief, repository, connectors, agents, and rules',
+            eyebrow: 'Project settings',
+            icon: GearIcon,
+            id: `project-settings-${projectItem.id}`,
+            projectId: projectItem.id,
+            projectTab: 'settings',
+            section: 'workspace',
+            title: `${projectItem.name} settings`,
+          }
+        );
+      }
+
+      projectItem.tasks.forEach((taskItem) => {
+        if (
+          !matchesQuery([
+            projectItem.name,
+            taskItem.key,
+            taskItem.title,
+            taskItem.description,
+            taskItem.branch,
+            taskItem.pr,
+            taskItem.state,
+            taskItem.agentId,
+            ...taskItem.tags.map((tag) => tag.label),
+          ])
+        ) {
+          return;
+        }
+
+        results.push({
+          description: `${projectItem.name} - ${taskItem.state} - ${getTaskAgent(taskItem).name}`,
+          eyebrow: taskItem.key,
+          icon: ListChecksIcon,
+          id: `task-${projectItem.id}-${taskItem.id}`,
+          projectId: projectItem.id,
+          projectTab: 'tasks',
+          section: 'workspace',
+          taskId: taskItem.id,
+          title: taskItem.title,
+        });
+      });
+    });
+
+    inboxItems.forEach((item) => {
+      if (
+        !matchesQuery([
+          item.title,
+          item.source,
+          item.status,
+          item.taskKey,
+          item.kind,
+        ])
+      ) {
+        return;
+      }
+
+      results.push({
+        description: `${item.source} - ${item.status}`,
+        eyebrow: 'Inbox',
+        icon: inboxIconByKind[item.kind],
+        id: `inbox-${item.id}`,
+        inboxId: item.id,
+        projectId: item.projectId,
+        section: 'inbox',
+        taskId: item.taskId,
+        title: item.title,
+      });
+    });
+
+    if (matchesQuery(['settings', 'notifications', 'routing', 'runtime'])) {
+      results.push({
+        description: 'Notifications, merge safety, and local runtime',
+        eyebrow: 'App',
+        icon: GearIcon,
+        id: 'app-settings',
+        section: 'settings',
+        title: 'Settings',
+      });
+    }
+
+    if (matchesQuery(['profile', profile.displayName, profile.role])) {
+      results.push({
+        description: `${profile.role} - ${kavbanAgents[profile.defaultAgentId].name}`,
+        eyebrow: 'Profile',
+        icon: UserCircleIcon,
+        id: 'profile',
+        section: 'profile',
+        title: profile.displayName,
+      });
+    }
+
+    return results.slice(0, 18);
+  }, [globalSearchQuery, inboxItems, profile, projects]);
 
   const toggleConnector = (id: ConnectorId) => {
     updateConnector(id, (connector) => ({
@@ -7837,12 +8115,38 @@ export function KavbanDashboard() {
       setProjectTab('tasks');
     }
   };
+  const openSearch = () => setIsSearchOpen(true);
+  const handleSelectSearchResult = (result: GlobalSearchResult) => {
+    if (result.projectId && result.projectId !== activeProjectId) {
+      selectProject(result.projectId);
+    }
+
+    if (result.inboxId) {
+      setSelectedInboxId(result.inboxId);
+    }
+
+    if (result.taskId) {
+      setSelectedTaskId(result.taskId);
+      setTaskView('list');
+    }
+
+    if (result.projectTab) {
+      setProjectTab(result.projectTab);
+    } else if (result.section === 'workspace') {
+      setProjectTab('tasks');
+    }
+
+    setActiveSection(result.section);
+    setIsSearchOpen(false);
+    setGlobalSearchQuery('');
+  };
 
   return (
     <div className="dark h-screen w-screen overflow-hidden bg-[#08090a] p-3 font-ibm-plex-sans text-[#c9cdd6]">
       <div className="flex h-full min-h-0 overflow-hidden rounded-[14px] border border-[#2b2e34] bg-[#111214] shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
         <Sidebar
           activeSection={activeSection}
+          onSearchOpen={openSearch}
           onSectionChange={handleSectionChange}
           profile={profile}
         />
@@ -7914,16 +8218,27 @@ export function KavbanDashboard() {
               onNotificationSettingChange={(kind, enabled) =>
                 updateNotificationSetting({ enabled, kind })
               }
+              onSearchOpen={openSearch}
             />
           )}
           {activeSection === 'profile' && (
             <ProfileView
               onProfileChange={updateProfile}
+              onSearchOpen={openSearch}
               profile={profile}
             />
           )}
         </main>
       </div>
+      {isSearchOpen && (
+        <GlobalSearchOverlay
+          onClose={() => setIsSearchOpen(false)}
+          onQueryChange={setGlobalSearchQuery}
+          onSelectResult={handleSelectSearchResult}
+          query={globalSearchQuery}
+          results={globalSearchResults}
+        />
+      )}
     </div>
   );
 }

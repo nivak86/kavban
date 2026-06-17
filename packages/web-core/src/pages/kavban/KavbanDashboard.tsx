@@ -198,6 +198,30 @@ const workflowColumns = kavbanWorkflowColumns;
 const agentOptions: KavbanAgentId[] = ['codex', 'claude'];
 const reviewerOptions: KavbanAgentId[] = ['reviewer', 'codex'];
 const taskPriorities: KavbanTaskPriority[] = ['High', 'Medium', 'Low'];
+
+function getIndependentReviewerOptions(agentId: KavbanAgentId) {
+  return reviewerOptions.filter((reviewerId) => reviewerId !== agentId);
+}
+
+function getFallbackReviewerId(agentId: KavbanAgentId) {
+  return getIndependentReviewerOptions(agentId)[0] ?? 'reviewer';
+}
+
+function hasUnsafeAgentRouting(input: KavbanAgentRoutingInput) {
+  return [input.defaultAgentId, input.uiAgentId, input.codeAgentId].some(
+    (agentId) => agentId === input.reviewerAgentId
+  );
+}
+
+function getAgentRoutingConflictLabels(input: KavbanAgentRoutingInput) {
+  const conflicts = [
+    ['Default worker', input.defaultAgentId],
+    ['UI and product work', input.uiAgentId],
+    ['Code and tests', input.codeAgentId],
+  ].filter(([, agentId]) => agentId === input.reviewerAgentId);
+
+  return conflicts.map(([label]) => label).join(', ');
+}
 const aiReviewOutcomeOptions: Array<{
   className: string;
   icon: PhosphorIcon;
@@ -2770,11 +2794,16 @@ function TaskCreatePanel({
   const [selectedDependencies, setSelectedDependencies] = useState<string[]>(
     []
   );
+  const independentReviewerOptions = getIndependentReviewerOptions(agentId);
 
   useEffect(() => {
     setStatus(defaultStatus);
     setAgentId(defaultAgentId);
-    setReviewerId(defaultReviewerId);
+    setReviewerId(
+      defaultReviewerId === defaultAgentId
+        ? getFallbackReviewerId(defaultAgentId)
+        : defaultReviewerId
+    );
     setRequiresHumanReview(defaultHumanReviewRequired);
     setSelectedContextFiles(defaultContextFiles);
   }, [
@@ -2784,6 +2813,12 @@ function TaskCreatePanel({
     defaultReviewerId,
     defaultStatus,
   ]);
+
+  useEffect(() => {
+    if (agentId === reviewerId) {
+      setReviewerId(getFallbackReviewerId(agentId));
+    }
+  }, [agentId, reviewerId]);
 
   const toggleContextFile = (path: string) => {
     setSelectedContextFiles((current) =>
@@ -2965,7 +3000,7 @@ function TaskCreatePanel({
                 }
                 className={`${taskFormFieldClass} h-9`}
               >
-                {reviewerOptions.map((item) => (
+                {independentReviewerOptions.map((item) => (
                   <option key={item} value={item}>
                     {kavbanAgents[item].name}
                   </option>
@@ -3455,6 +3490,7 @@ function TaskEditForm({
   const [selectedDependencies, setSelectedDependencies] = useState(
     task.dependencies
   );
+  const independentReviewerOptions = getIndependentReviewerOptions(agentId);
 
   useEffect(() => {
     setTitle(task.title);
@@ -3462,13 +3498,23 @@ function TaskEditForm({
     setStatus(task.status);
     setPriority(task.priority);
     setAgentId(task.agentId);
-    setReviewerId(task.reviewerId);
+    setReviewerId(
+      task.reviewerId === task.agentId
+        ? getFallbackReviewerId(task.agentId)
+        : task.reviewerId
+    );
     setRequiresHumanReview(task.requiresHumanReview ?? true);
     setBranch(task.branch ?? '');
     setTagText(task.tags.map((tag) => tag.label).join(', '));
     setSelectedContextFiles(task.contextFiles);
     setSelectedDependencies(task.dependencies);
   }, [task]);
+
+  useEffect(() => {
+    if (agentId === reviewerId) {
+      setReviewerId(getFallbackReviewerId(agentId));
+    }
+  }, [agentId, reviewerId]);
 
   const toggleContextFile = (path: string) => {
     setSelectedContextFiles((current) =>
@@ -3624,7 +3670,7 @@ function TaskEditForm({
             }
             className={`${taskFormFieldClass} h-9`}
           >
-            {reviewerOptions.map((item) => (
+            {independentReviewerOptions.map((item) => (
               <option key={item} value={item}>
                 {kavbanAgents[item].name}
               </option>
@@ -5861,6 +5907,9 @@ function WorkspaceSettings({
   const missingRequiredContextFiles = requiredContextFilePaths.filter(
     (path) => !contextFilePathSet.has(path)
   );
+  const hasReviewerRoutingConflict = hasUnsafeAgentRouting(draftAgentRouting);
+  const reviewerRoutingConflictLabels =
+    getAgentRoutingConflictLabels(draftAgentRouting);
 
   useEffect(() => {
     setDraftAgentRouting(agentRouting);
@@ -5931,6 +5980,13 @@ function WorkspaceSettings({
   };
 
   const saveAgentRouting = () => {
+    if (hasUnsafeAgentRouting(draftAgentRouting)) {
+      setAgentRoutingError(
+        'Reviewer must be independent from every worker route.'
+      );
+      return;
+    }
+
     const saved = onAgentRoutingChange(draftAgentRouting);
 
     if (!saved) {
@@ -6124,14 +6180,35 @@ function WorkspaceSettings({
                 }
                 className={cn(taskFormFieldClass, 'h-9')}
               >
-                {reviewerOptions.map((agentId) => (
-                  <option key={agentId} value={agentId}>
-                    {kavbanAgents[agentId].name}
-                  </option>
-                ))}
+                {reviewerOptions.map((agentId) => {
+                  const usedByWorker = [
+                    draftAgentRouting.defaultAgentId,
+                    draftAgentRouting.uiAgentId,
+                    draftAgentRouting.codeAgentId,
+                  ].includes(agentId);
+
+                  return (
+                    <option
+                      key={agentId}
+                      value={agentId}
+                      disabled={usedByWorker}
+                    >
+                      {kavbanAgents[agentId].name}
+                      {usedByWorker ? ' (worker)' : ''}
+                    </option>
+                  );
+                })}
               </select>
             </label>
           </div>
+
+          {hasReviewerRoutingConflict && (
+            <p className="mt-4 flex items-center gap-2 rounded-[6px] border border-[#5c3434] bg-[#211719] px-3 py-2 text-xs font-semibold text-[#f26d6d]">
+              <LockKeyIcon className="size-3.5 shrink-0" weight="bold" />
+              Reviewer matches {reviewerRoutingConflictLabels}. Choose an
+              independent reviewer before saving.
+            </p>
+          )}
 
           <div className="mt-4 flex flex-col gap-3 border-t border-[#24262b] pt-4 sm:flex-row sm:items-center sm:justify-between">
             <label className="flex items-center gap-3 text-sm font-semibold text-[#cfd2da]">
@@ -7090,14 +7167,26 @@ function ProfileView({
   );
   const [humanGate, setHumanGate] = useState(profile.humanGate);
   const [saveState, setSaveState] = useState('');
+  const independentReviewerOptions =
+    getIndependentReviewerOptions(defaultAgentId);
 
   useEffect(() => {
     setDisplayName(profile.displayName);
     setRole(profile.role);
     setDefaultAgentId(profile.defaultAgentId);
-    setReviewerAgentId(profile.reviewerAgentId);
+    setReviewerAgentId(
+      profile.reviewerAgentId === profile.defaultAgentId
+        ? getFallbackReviewerId(profile.defaultAgentId)
+        : profile.reviewerAgentId
+    );
     setHumanGate(profile.humanGate);
   }, [profile]);
+
+  useEffect(() => {
+    if (defaultAgentId === reviewerAgentId) {
+      setReviewerAgentId(getFallbackReviewerId(defaultAgentId));
+    }
+  }, [defaultAgentId, reviewerAgentId]);
 
   return (
     <div className="h-full overflow-y-auto bg-[#101113]">
@@ -7214,7 +7303,7 @@ function ProfileView({
                 }}
                 className={`${taskFormFieldClass} h-9`}
               >
-                {reviewerOptions.map((item) => (
+                {independentReviewerOptions.map((item) => (
                   <option key={item} value={item}>
                     {kavbanAgents[item].name}
                   </option>

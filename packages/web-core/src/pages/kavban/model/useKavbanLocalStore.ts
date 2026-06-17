@@ -123,6 +123,23 @@ const tagColors = ['#6aa7ff', '#78d16d', '#f2d14b', '#f26d6d', '#d6cdfd'];
 const workerAgentIds: KavbanAgentId[] = ['codex', 'claude'];
 const reviewerAgentIds: KavbanAgentId[] = ['reviewer', 'codex'];
 
+function getIndependentReviewerId(
+  agentId: KavbanAgentId,
+  reviewerId: KavbanAgentId
+) {
+  if (agentId !== reviewerId) {
+    return reviewerId;
+  }
+
+  return reviewerAgentIds.find((id) => id !== agentId) ?? reviewerId;
+}
+
+function hasUnsafeAgentRouting(input: KavbanAgentRoutingInput) {
+  return [input.defaultAgentId, input.uiAgentId, input.codeAgentId].some(
+    (agentId) => agentId === input.reviewerAgentId
+  );
+}
+
 function slugifyProjectName(name: string) {
   return (
     name
@@ -375,7 +392,8 @@ function normalizeAgentRouting(input: KavbanAgentRoutingInput) {
     !workerAgentIds.includes(input.defaultAgentId) ||
     !workerAgentIds.includes(input.uiAgentId) ||
     !workerAgentIds.includes(input.codeAgentId) ||
-    !reviewerAgentIds.includes(input.reviewerAgentId)
+    !reviewerAgentIds.includes(input.reviewerAgentId) ||
+    hasUnsafeAgentRouting(input)
   ) {
     return null;
   }
@@ -540,17 +558,22 @@ function normalizeCodexTaskPayload(
     importedAt,
   };
 
+  const agentId = normalizePayloadAgent(
+    payload.suggested_agent ?? payload.suggestedAgent,
+    projectRouting.defaultAgentId
+  );
+
   return {
     input: {
       title,
       description: getPayloadString(payload.description),
       status: 'backlog' as const,
       priority: normalizePayloadPriority(payload.priority),
-      agentId: normalizePayloadAgent(
-        payload.suggested_agent ?? payload.suggestedAgent,
-        projectRouting.defaultAgentId
+      agentId,
+      reviewerId: getIndependentReviewerId(
+        agentId,
+        projectRouting.reviewerAgentId
       ),
-      reviewerId: projectRouting.reviewerAgentId,
       requiresHumanReview: getPayloadBoolean(
         payload.requires_human_review ?? payload.requiresHumanReview,
         projectRouting.humanReviewRequired
@@ -859,6 +882,7 @@ export function useKavbanLocalStore() {
         title: trimmedTitle,
         description: input.description.trim(),
         branch: input.branch?.trim(),
+        reviewerId: getIndependentReviewerId(input.agentId, input.reviewerId),
         tagLabels: input.tagLabels.map((label) => label.trim()).filter(Boolean),
         dependencies: input.dependencies.filter(Boolean),
         contextFiles: input.contextFiles.filter(Boolean),
@@ -955,6 +979,7 @@ export function useKavbanLocalStore() {
         title: trimmedTitle,
         description: input.description.trim(),
         branch: input.branch?.trim(),
+        reviewerId: getIndependentReviewerId(input.agentId, input.reviewerId),
         tagLabels,
         dependencies: input.dependencies.filter(Boolean),
         contextFiles: input.contextFiles.filter(Boolean),
@@ -1968,7 +1993,8 @@ export function useKavbanLocalStore() {
       !role ||
       !humanGate ||
       !workerAgentIds.includes(input.defaultAgentId) ||
-      !reviewerAgentIds.includes(input.reviewerAgentId)
+      !reviewerAgentIds.includes(input.reviewerAgentId) ||
+      input.defaultAgentId === input.reviewerAgentId
     ) {
       return false;
     }

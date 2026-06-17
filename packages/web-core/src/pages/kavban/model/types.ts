@@ -256,6 +256,8 @@ export type KavbanInboxItem = {
   title: string;
   source: string;
   time: string;
+  projectId?: string;
+  taskId?: string;
   taskKey: string;
   status: string;
   kind: KavbanInboxKind;

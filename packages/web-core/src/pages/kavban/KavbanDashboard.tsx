@@ -1898,27 +1898,29 @@ function TopBar({
 }
 
 function InboxView({
+  activeProjectId,
   inboxItems,
   onAddTaskComment,
   onOpenTask,
   onRecordHumanReview,
+  projects,
   selectedInboxId,
   onSelectInbox,
-  tasks,
 }: {
+  activeProjectId: string;
   inboxItems: InboxItem[];
   onAddTaskComment: (
     taskId: string,
     input: KavbanAddTaskCommentInput
   ) => boolean;
-  onOpenTask: (taskId: string) => void;
+  onOpenTask: (projectId: string, taskId: string) => void;
   onRecordHumanReview: (
     taskId: string,
     input: KavbanRecordHumanReviewInput
   ) => boolean;
+  projects: Project[];
   selectedInboxId: string;
   onSelectInbox: (id: string) => void;
-  tasks: Task[];
 }) {
   const [commandText, setCommandText] = useState('');
   const [commandState, setCommandState] = useState('');
@@ -1933,10 +1935,39 @@ function InboxView({
   const selected =
     visibleInboxItems.find((item) => item.id === selectedInboxId) ??
     visibleInboxItems[0];
-  const task = tasks.find((item) => item.key === selected?.taskKey);
+  const selectedTaskLink = useMemo(() => {
+    if (!selected) {
+      return null;
+    }
+
+    const selectedProject = selected.projectId
+      ? projects.find((candidate) => candidate.id === selected.projectId)
+      : projects.find((candidate) =>
+          candidate.tasks.some((task) => task.key === selected.taskKey)
+        );
+    const selectedTask = selectedProject?.tasks.find((candidate) =>
+      selected.taskId
+        ? candidate.id === selected.taskId
+        : candidate.key === selected.taskKey
+    );
+
+    if (!selectedProject || !selectedTask) {
+      return null;
+    }
+
+    return {
+      project: selectedProject,
+      task: selectedTask,
+    };
+  }, [projects, selected]);
+  const task = selectedTaskLink?.task;
+  const taskProject = selectedTaskLink?.project;
+  const isLinkedTaskActive = taskProject?.id === activeProjectId;
   const SelectedIcon = selected ? inboxIconByKind[selected.kind] : ArchiveIcon;
   const canReviewFromInbox =
-    selected?.kind === 'approval' && task?.status === 'human-review';
+    selected?.kind === 'approval' &&
+    isLinkedTaskActive &&
+    task?.status === 'human-review';
 
   useEffect(() => {
     setCommandText('');
@@ -1948,6 +1979,11 @@ function InboxView({
 
     if (!task || !commandText.trim()) {
       setCommandState(task ? '' : 'No linked task');
+      return;
+    }
+
+    if (!isLinkedTaskActive) {
+      setCommandState('Open task before triage');
       return;
     }
 
@@ -1964,6 +2000,11 @@ function InboxView({
       return;
     }
 
+    if (!isLinkedTaskActive) {
+      setCommandState('Open task before triage');
+      return;
+    }
+
     const saved = onAddTaskComment(task.id, { body });
 
     if (saved) {
@@ -1974,6 +2015,11 @@ function InboxView({
   const recordInboxApproval = (status: 'approved' | 'changes-requested') => {
     if (!task) {
       setCommandState('No linked task');
+      return;
+    }
+
+    if (!isLinkedTaskActive) {
+      setCommandState('Open task before review');
       return;
     }
 
@@ -2078,6 +2124,11 @@ function InboxView({
               <span className="font-ibm-plex-mono text-sm text-[#777d88]">
                 {selected?.taskKey}
               </span>
+              {taskProject && (
+                <span className="rounded-full border border-[#2a2c31] px-2 py-1 text-xs font-medium text-[#9ca1ad]">
+                  {taskProject.name}
+                </span>
+              )}
               <span className="rounded-full border border-[#2a2c31] px-2 py-1 text-xs font-medium text-[#9ca1ad]">
                 {selected?.status}
               </span>
@@ -2093,7 +2144,11 @@ function InboxView({
               <div className="mt-5 flex flex-wrap gap-2">
                 <button
                   type="button"
-                  onClick={() => onOpenTask(task.id)}
+                  onClick={() => {
+                    if (taskProject) {
+                      onOpenTask(taskProject.id, task.id);
+                    }
+                  }}
                   className="inline-flex h-9 items-center gap-2 rounded-[6px] border border-[#2a2c31] bg-[#202227] px-3 text-xs font-semibold text-[#cfd2da] transition-colors hover:border-[#3a3d46]"
                 >
                   <ListChecksIcon className="size-4" weight="bold" />
@@ -7502,18 +7557,23 @@ export function KavbanDashboard() {
         <main className="min-w-0 flex-1 overflow-hidden">
           {activeSection === 'inbox' && (
             <InboxView
+              activeProjectId={activeProjectId}
               inboxItems={inboxItems}
               onAddTaskComment={addTaskComment}
-              onOpenTask={(taskId) => {
+              onOpenTask={(projectId, taskId) => {
+                if (projectId !== activeProjectId) {
+                  selectProject(projectId);
+                }
+
                 setSelectedTaskId(taskId);
                 setTaskView('list');
                 setProjectTab('tasks');
                 setActiveSection('workspace');
               }}
               onRecordHumanReview={recordHumanReview}
+              projects={projects}
               selectedInboxId={selectedInboxId}
               onSelectInbox={setSelectedInboxId}
-              tasks={project.tasks}
             />
           )}
           {activeSection === 'workspace' && (

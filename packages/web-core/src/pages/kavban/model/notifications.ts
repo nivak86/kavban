@@ -174,8 +174,10 @@ function createInboxItemFromEvent(
   return {
     id: `notification-${event.id}`,
     kind: rule.inboxKind,
+    projectId: project.id,
     source: `${project.name} - ${event.summary}`,
     status: rule.status,
+    taskId: task.id,
     taskKey: task.key,
     time: formatInboxTime(event.createdAt),
     title: `${rule.label} for ${task.key}`,
